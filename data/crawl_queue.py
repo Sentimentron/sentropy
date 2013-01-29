@@ -7,12 +7,13 @@
 import logging
 import types
 
+import boto.sqs 
 from db import CrawlController, CrawlFile, CrawlSource
-from boto.s3.connection import SQSConnection
 from boto.sqs.message import Message
 
-DEFAULT_QUEUE_NAME="crawl"
-DEFAULT_ITEMS_LIMIT=50
+DEFAULT_QUEUE_NAME = "crawl-process-queue"
+DEFAULT_ITEMS_LIMIT = 50
+SQS_REGION = "us-east-1"
 
 class CrawlQueue(object):
 
@@ -30,7 +31,7 @@ class CrawlQueue(object):
 
 		logging.info("Using '%s' as the queue.", (queue_name,))
 
-		self._conn  = SQSConnection()
+		self._conn  = boto.sqs.connect_to_region(SQS_REGION)
 		self._queue = self._conn.lookup(queue_name)
 		if self._queue is None:
 			logging.info("Creating '%s'...", (queue_name,))
@@ -50,7 +51,7 @@ class CrawlQueue(object):
 			for item in rs:
 				iden = int(item.get_body())
 				self._messages[iden] = item
-				yield self._controller.get_CrawFile_fromid(iden)
+				yield self._controller.get_CrawlFile_fromid(iden)
 
 	def set_completed(self, what):
 		if type(what) == CrawlFile:
@@ -66,8 +67,7 @@ class CrawlQueue(object):
 		del msg
 
 	def _get_queueItemAvailabilityStatus(self):
-		rs = self._queue.get_messages()
-		status = len(rs) > DEFAULT_ITEMS_LIMIT
+		status = self._queue.count() > DEFAULT_ITEMS_LIMIT
 		if not status:
 			logging.info("%s is under the item limit", self._queue_name)
 		return status
