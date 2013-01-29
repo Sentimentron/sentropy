@@ -11,7 +11,7 @@ import boto.sqs
 from db import CrawlController, CrawlFile, CrawlSource
 from boto.sqs.message import Message
 
-DEFAULT_QUEUE_NAME = "crawl-process-queue"
+DEFAULT_QUEUE_NAME = "crawl-queue"
 DEFAULT_ITEMS_LIMIT = 50
 SQS_REGION = "us-east-1"
 
@@ -51,7 +51,10 @@ class CrawlQueue(object):
 			for item in rs:
 				iden = int(item.get_body())
 				self._messages[iden] = item
-				yield self._controller.get_CrawlFile_fromid(iden)
+				y = self._controller.get_CrawlFile_fromid(iden)
+				if y.status != "Incomplete":
+					continue
+				yield y
 
 	def set_completed(self, what):
 		if type(what) == CrawlFile:

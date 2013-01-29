@@ -2,6 +2,8 @@
 
 # Crawl process helper
 
+import sys
+
 import core
 from data import CrawlQueue
 from data.db import CrawlController
@@ -12,4 +14,5 @@ if __name__ == "__main__":
 	q = CrawlQueue(c)
 
 	for i in q:
-		print i.id
+		print c.download_CrawlFile(i)
+		sys.exit(1)
