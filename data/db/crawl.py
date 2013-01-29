@@ -96,6 +96,22 @@ class CrawlController(DBBackedController):
 
 		return it
 
+	def get_randomCrawlIdentifiers(self, limit=100):
+		from sqlalchemy.sql.expression import func
+		it = self._session.query(CrawlFile).filter_by(status = "Incomplete").order_by(func.rand()).limit(limit)
+		return [i.id for i in it]
+
+	def get_CrawlFile_fromid(self, identifier):
+
+		it = self._session.query(CrawlFile).filter_by(id=identifier)
+
+		try:
+			it = it.one()
+		except NoResultFound:
+			return None 
+
+		return it
+
 	def deduplicate(self):
 		logging.debug("Deduplicating...")
 		sql = "DELETE FROM crawl_files WHERE id NOT IN (SELECT MIN(id) FROM crawl_files GROUP BY key, source_id)"
