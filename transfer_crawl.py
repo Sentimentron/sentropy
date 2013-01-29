@@ -42,15 +42,16 @@ def _transfer(db_file, key_prefix, key_type, safety=False):
 
 	cur = con.cursor()
 	cur.execute(sql)
-	keys = []
+
+	inserted = 0
+
 	for row in cur:
 		key, = row
-		keys.append(key)
-	logging.info("Creating %d new objects..." % (len(keys)))
-
-	for key in keys:
 		rec = CrawlFile(key, src, key_type)
 		controller.attach_CrawlFile(rec)
+		inserted += 1
+		if safety or (inserted % 2000) == 0:
+			controller.commit()
 
 	controller.commit()
 	controller.deduplicate()
