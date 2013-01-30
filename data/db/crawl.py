@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import logging
-import tempfile
 
 from sqlalchemy import Table, Sequence, Column, String, Integer, UniqueConstraint, ForeignKey, create_engine
 from sqlalchemy.orm.session import Session 
@@ -10,8 +9,6 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.types import Enum, DateTime
 from sqlalchemy.orm.exc import *
 from datetime import datetime
-from boto.s3.bucket         import Bucket
-from boto.s3.key            import Key
 
 from controller import DBBackedController
 
@@ -134,27 +131,4 @@ class CrawlController(DBBackedController):
 			raise TypeError((src, type(src)))
 
 		self._session.add(src)
-
-	def download_CrawlFile(self, which):
-		import boto
-		logging.info("Connecting to S3...")
-		conn   = boto.connect_s3()
-		bucket = which.src.key 
-
-		logging.info("Downloading %s from bucket %s", which.key, bucket)
-		bucket = Bucket(connection=conn, name=bucket)
-		key    = Key(bucket)
-		key.key = which.key 
-
-		if not key.exists():
-			logging.info("Key %s doesn't exist in %s, marking as Error", which.key, bucket)
-			which.status = "Error"
-
-		tmp = tempfile.mktemp(suffix='bz2.sql', prefix='db-')
-		fp  = open(tmp, 'wb')
-		logging.info("Downloading %s...", which.key)
-		key.get_contents_to_file(fp)
-		fp.close()
-		logging.info("Completed downloading %s...", which.key)
-		return tmp
 
