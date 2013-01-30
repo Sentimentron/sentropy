@@ -116,7 +116,7 @@ class CrawlController(DBBackedController):
 
 	def deduplicate(self):
 		logging.debug("Deduplicating...")
-		sql = "DELETE FROM crawl_files WHERE id NOT IN (SELECT MIN(id) FROM crawl_files GROUP BY key, source_id)"
+		sql = "DELETE FROM crawl_files WHERE id NOT IN (SELECT id FROM (SELECT MIN(id) as id FROM crawl_files GROUP BY `key`, source_id) AS tmp);" 
 		self._engine.execute(sql)
 		logging.debug("Deduplication finished.")
 
