@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import logging
+import re
 
 from sqlalchemy import Table, Sequence, Column, String, Integer, UniqueConstraint, ForeignKey, create_engine
 from sqlalchemy.orm.session import Session 
@@ -11,6 +12,8 @@ from sqlalchemy.orm.exc import *
 from datetime import datetime
 
 from controller import DBBackedController
+
+KEY_VAL = re.compile("^([a-z0-9]([-a-z0-9]*[a-z0-9])?\\.)+((a[cdefgilmnoqrstuwxz]|aero|arpa)|(b[abdefghijmnorstvwyz]|biz)|(c[acdfghiklmnorsuvxyz]|cat|com|coop)|d[ejkmoz]|(e[ceghrstu]|edu)|f[ijkmor]|(g[abdefghilmnpqrstuwy]|gov)|h[kmnrtu]|(i[delmnoqrst]|info|int)|(j[emop]|jobs)|k[eghimnprwyz]|l[abcikrstuvy]|(m[acdghklmnopqrstuvwxyz]|mil|mobi|museum)|(n[acefgilopruz]|name|net)|(om|org)|(p[aefghklmnrstwy]|pro)|qa|r[eouw]|s[abcdeghijklmnortvyz]|(t[cdfghjklmnoprtvwz]|travel)|u[agkmsyz]|v[aceginu]|w[fs]|y[etu]|z[amw])$")
 
 Base = declarative_base()
 
@@ -131,4 +134,144 @@ class CrawlController(DBBackedController):
 			raise TypeError((src, type(src)))
 
 		self._session.add(src)
+class Domain(Base):
+
+	__tablename__ = 'domains'
+
+	id 		= Column(Integer, Sequence('domain_id_seq'), primary_key = True)
+	key 	= Column(String(255), nullable = False, unique = True)
+	date    = Column(DateTime, nullable = False)
+
+	@classmethod
+	def is_valid(cls, value):
+		if re.match(KEY_VAL, value) is None:
+			raise ValueError(("Not a valid domain", value))
+		if value[0] == '.':
+			raise ValueError(("Not a valid domain", value))
+		if len(value) > 255:
+			raise ValueError(("Domain is too long", value))
+
+	@validates('key')
+	def validate_domain_key(self, key, value):
+		self.is_valid(value)
+
+		return value 
+
+	@validates('date')
+	def validate_date(self, key, value):
+		if type(value) is not datetime:
+			raise TypeError(("Not a datetime", value, type(value)))
+
+		return value
+
+	def __str__(self):
+		return "Domain(%s)" % (self.key,)
+
+	def __repr__(self):
+		return "Domain(%s|%s)" % (self.key, self.date)
+
+	def __init__(self, key):
+		self.key = key 
+		self.date = datetime.now()
+
+class DomainController(DBBackedController):
+
+	def __init__(self, engine):
+		super(DomainController, self).__init__(engine, Base)
+
+	def get_Domain(self, key):
+		it = self._session.query(Domain).filter_by(key=key)
+		try:
+			it = it.one()
+		except NoResultFound:
+			return None 
+
+		return it
+
+	def get_Domain_fromurl(self, url):
+		orig = url
+		if "http://" in url:
+			url = url[7:]
+
+		for pos, char in enumerate(url):
+			if char == '/':
+				break
+
+		key = url[:pos]
+
+		# Search the database
+		d = self.get_Domain(key)
+		if d is None:
+			d = Domain(key)
+			self.attach_Domain(d)
+			return d
+
+		return d
+
+
+	def attach_Domain(self, domain):
+		if type(domain) != Domain:
+			raise TypeError("Not a domain: %s" % (domain,))
+
+		self._session.add(domain)
+
+class Article(Base):
+
+	__tablename__ = 'articles'
+
+	id 		= Column(Integer, Sequence('article_id_seq'), primary_key = True)
+	path 	= Column(String(2083), nullable=False)
+	crawled = Column(DateTime, nullable = False)
+	inserted= Column(DateTime, nullable = False)
+	crawl_id= Column(Integer, ForeignKey("crawl_files.id"), nullable = True)
+	domain_id = Column(Integer, ForeignKey("domains.id"), nullable = False)
+	status  = Column(Enum("Processed", "NoDates", "NoContent", "UnsupportedType", "OtherError"), nullable = False)
+
+	domain = relationship("Domain")
+
+	@validates('path')
+	def validate_path(self, key, value):
+		if "http://" in value:
+			raise ValueError("path: shouldn't be a URL: %s", (value,))
+
+		for pos, char in enumerate(value):
+			if char == '/':
+				break
+
+		sub_path = value[:pos]
+		try:
+			Domain.is_valid(sub_path)
+		except ValueError:
+			return value 
+
+	def __init__(self, path, crawled, crawl_id, domain, status):
+		self.path = path 
+		self.crawled = crawled
+		self.crawl_id = crawl_id
+		self.status = status
+		self.inserted = datetime.now()
+		self.domain_id = domain.id
+
+class ArticleController(DBBackedController):
+
+	def __init__(self, engine):
+		super(ArticleController, self).__init__(engine, Base)
+
+	@classmethod
+	def get_path_fromurl(cls, url):
+		if "http://" in url:
+			url = url[7:]
+
+		for pos, char in enumerate(url):
+			if char == '/':
+				break
+
+		key = url[pos:]
+		return key 
+
+	def attach_Article(self, article):
+		if type(article) is not Article:
+			raise TypeError(("Must be an Article", article, type(article)))
+
+		self._session.add(article)
 

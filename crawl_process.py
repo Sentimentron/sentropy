@@ -11,7 +11,7 @@ from backend.db import CrawlController
 
 def worker_init():
 	global cp 
-	cp = CrawlProcessor()
+	cp = CrawlProcessor(core.get_database_engine_string())
 
 def worker_process(record):
 	return cp.process_record(record)
@@ -29,15 +29,15 @@ if __name__ == "__main__":
 	records = []
 
 	if testing:
-		# records = # list(r.read_CrawlFileSQL(open('tmpSYh7nw', 'r'), False))
-		records = list(r.read_CrawlFileSQL('tmpSYh7nw', False))[0:2]
+		for record in list(r.read_CrawlFileSQL('tmpSYh7nw', False))[3:7]:
+			records.append((None, record))
 	else:
 		for i in q:
 			record = r.read_CrawlFile(i)
 			if record is None:
 				continue
 			for rec in record:
-				records.append(rec)
+				records.append((i.crawl_id, rec))
 				break
 	
 	worker_init()
