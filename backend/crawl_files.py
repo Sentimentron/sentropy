@@ -31,6 +31,8 @@ class CrawlFileController(object):
 		if not key.exists():
 			logging.info("Key %s doesn't exist in %s, marking as Error", which.key, bucket)
 			which.status = "Error"
+			self._controller.commit()
+			return None
 
 		#tmp = tempfile.mktemp(suffix='bz2.sql', prefix='db-')
 		#fp  = open(tmp, 'wb')
@@ -41,12 +43,15 @@ class CrawlFileController(object):
 		logging.info("Completed downloading %s...", which.key)
 		return fp
 
-	def read_CrawlFileSQL(self, fp):
+	def decompress_CrawlFileSQL(self, fp):
 		_junk, fname = tempfile.mkstemp()
 		logging.info("Decompressing to %s...", fname)
 		decompressed_fp = open(fname, 'w+b')
 		subprocess.check_call(["xz", "-d"], stdin=fp, stdout=decompressed_fp)
 		decompressed_fp.close()
+		return fname
+
+	def read_CrawlFileSQL(self, fname, delete_after=True):
 
 		logging.info("Opening database...")
 		db = sqlite3.connect(fname)
@@ -54,22 +59,24 @@ class CrawlFileController(object):
 		cur.execute("SELECT headers, content, site, date_crawled, content_type FROM articles")
 		for row in cur:
 			headers, content, site, date_crawled, content_type = row 
-			if content_type != 'text/html':
-				logging.error("Unsupported content type: %s", str(row))
-				continue 
 			yield (headers, content, site, date_crawled, content_type)
 
 		db.close()
-		logging.info("Deleting %s...", fname)
-		os.remove(fname)
+
+		if delete_after:
+			logging.info("Deleting %s...", fname)
+			os.remove(fname)
 
 
 	def read_CrawlFile(self, which):
 
 		fp = self.download_CrawlFile(which)
+		if fp is None:
+			return None
 
 		if which.kind == "SQL":
-			return self.read_CrawlFileSQL(fp)
+			fname = self.decompress_CrawlFileSQL(fp)
+			return self.read_CrawlFileSQL(fname)
 		else:
 			raise Exception("Unimplemented")
 

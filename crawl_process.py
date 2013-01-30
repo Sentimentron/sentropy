@@ -18,20 +18,29 @@ def worker_process(record):
 
 if __name__ == "__main__":
 	core.configure_logging()
+
+	testing = "--testing" in sys.argv
+
 	c = CrawlController(core.get_database_engine_string())
 	q = CrawlQueue(c)
 	r = CrawlFileController(c)
-
 	p = multiprocessing.Pool()
 
 	records = []
 
-	for i in q:
-		record = r.read_CrawlFile(i)
-		for rec in record:
-			records.append(rec)
-			break
+	if testing:
+		# records = # list(r.read_CrawlFileSQL(open('tmpSYh7nw', 'r'), False))
+		records = list(r.read_CrawlFileSQL('tmpSYh7nw', False))[0:2]
+	else:
+		for i in q:
+			record = r.read_CrawlFile(i)
+			if record is None:
+				continue
+			for rec in record:
+				records.append(rec)
+				break
 	
-	worker_pool = Pool(None, worker_init)
-
-	print worker_pool.map(worker_process, records)
+	worker_init()
+	print map(worker_process, records)
+	#worker_pool = multiprocessing.Pool(None, worker_init)
+	#print worker_pool.map(worker_process, records)
