@@ -10,7 +10,7 @@ import sys
 import sqlite3
 
 import core
-from data.db import CrawlSource, CrawlFile, CrawlController
+from backend.db import CrawlSource, CrawlFile, CrawlController
 
 def _transfer(db_file, key_prefix, key_type, safety=False):
 	if key_type not in ["ARFF", "SQL", "Text"]:

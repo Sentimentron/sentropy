@@ -2,11 +2,19 @@
 
 # Crawl process helper
 
+import multiprocessing
 import sys
 
 import core
-from data import CrawlQueue, CrawlFileController
-from data.db import CrawlController
+from backend import CrawlQueue, CrawlFileController, CrawlProcessor
+from backend.db import CrawlController
+
+def worker_init():
+	global cp 
+	cp = CrawlProcessor()
+
+def worker_process(record):
+	return cp.process_record(record)
 
 if __name__ == "__main__":
 	core.configure_logging()
