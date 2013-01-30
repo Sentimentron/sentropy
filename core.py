@@ -18,6 +18,7 @@ def check_environment():
 	assert "SENT_DB_URL" in os.environ
 	assert "SENT_DB_USER" in os.environ
 	assert "SENT_DB_PASS" in os.environ
+	assert "BOILERPIPE_URL" in os.environ
 
 def get_database_engine_string():
 	

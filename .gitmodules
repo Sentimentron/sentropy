@@ -1,0 +1,3 @@
+[submodule "backend/pysen"]
+	path = backend/pysen
+	url = sen@bluemine.co.uk:pysen.git

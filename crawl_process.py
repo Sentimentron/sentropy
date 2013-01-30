@@ -22,6 +22,16 @@ if __name__ == "__main__":
 	q = CrawlQueue(c)
 	r = CrawlFileController(c)
 
+	p = multiprocessing.Pool()
+
+	records = []
+
 	for i in q:
-		print list(r.read_CrawlFile(i))
-		sys.exit(0)
+		record = r.read_CrawlFile(i)
+		for rec in record:
+			records.append(rec)
+			break
+	
+	worker_pool = Pool(None, worker_init)
+
+	print worker_pool.map(worker_process, records)
