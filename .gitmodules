@@ -1,3 +1,6 @@
 [submodule "backend/pysen"]
 	path = backend/pysen
 	url = sen@bluemine.co.uk:pysen.git
+[submodule "backend/pydate"]
+	path = backend/pydate
+	url = sen@bluemine.co.uk:pydate.git
