@@ -59,14 +59,17 @@ class CrawlProcessor(object):
 			# Run keyword extraction 
 
 			# Run sentiment analysis
+			trace = {}
+			features = self.cls.classify(worker_req_thread.result, trace) 
+			for item in trace:
+				print item, ':', trace[item]
+				raw_input()
 
 		except ValueError as ex:
 			status = ex.message
 
 		# Build database objects 
 		domain = self.dc.get_Domain_fromurl(url)
-		self.dc.commit()
-
 		path   = self.ac.get_path_fromurl(url)
 
 		logging.debug("Domain: %s", domain)
