@@ -1,14 +1,18 @@
 #!/usr/bin/env python
 
 # Crawl Processor 
+import itertools
 import logging
 import os
 import threading
 
+import nltk
+from nltk.tokenize import sent_tokenize
+
 from lxml import etree
 from bs4 import BeautifulSoup
-
 from pysen.documents import DocumentClassifier
+
 import pydate
 
 from db import Article, Domain, DomainController, ArticleController
@@ -56,14 +60,33 @@ class CrawlProcessor(object):
 			if worker_req_thread.result == None:
 				raise ValueError("NoContent")
 
+			content = worker_req_thread.result
+
 			# Run keyword extraction 
+			nnp_sets = set([])
+			for sentence in sent_tokenize(content):
+				text = nltk.word_tokenize(sentence)
+				pos  = nltk.pos_tag(text)
+				pos_groups = itertools.groupby(pos, lambda x: x[1])
+				for k, g in pos_groups:
+					if k != 'NNP':
+						continue
+					nnp_list = [word for word, pos in g]
+					nnp_len  = min(3, len(nnp_list))
+					cur = 1 
+					while cur <= nnp_len:
+						for combo in itertools.combinations(nnp_list, cur):
+							# TODO: map to keywords here
+							nnp_sets.add(combo)
+						cur += 1
+
+			for item in nnp_sets:
+				raw_input(item)
+
 
 			# Run sentiment analysis
 			trace = {}
 			features = self.cls.classify(worker_req_thread.result, trace) 
-			for item in trace:
-				print item, ':', trace[item]
-				raw_input()
 
 		except ValueError as ex:
 			status = ex.message
