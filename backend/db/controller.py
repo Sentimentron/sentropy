@@ -18,12 +18,16 @@ class DBBackedController(object):
 				logging.debug("Setting text factory for unicode compat.")
 				new_engine.raw_connection().connection.text_factory = str 
 			self._engine = new_engine
+			logging.info("Binding session...")
+			self._session = Session(bind=self._engine)
+		elif type(engine) is Session:
+			logging.info("Using existing Session...")
+			self._session = engine
 		else:
 			logging.info("Using existing engine...")
 			self._engine = engine
-
-		logging.info("Binding session...")
-		self._session = Session(bind=self._engine)
+			logging.info("Binding session...")
+			self._session = Session(bind=self._engine)
 		logging.info("Updating metadata...")
 		base_ref.metadata.create_all(self._engine)
 

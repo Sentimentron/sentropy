@@ -2,20 +2,48 @@
 
 import logging
 import re
+import types
 
-from sqlalchemy import Table, Sequence, Column, String, Integer, UniqueConstraint, ForeignKey, create_engine
+from sqlalchemy import Table, Sequence, Float, Column, String, Integer, UniqueConstraint, ForeignKey, create_engine
 from sqlalchemy.orm.session import Session 
 from sqlalchemy.orm import validates, relationship
 from sqlalchemy.ext.declarative import declarative_base 
-from sqlalchemy.types import Enum, DateTime
+from sqlalchemy.types import Enum, DateTime, SmallInteger
 from sqlalchemy.orm.exc import *
 from datetime import datetime
-
-from controller import DBBackedController
 
 KEY_VAL = re.compile("^([a-z0-9]([-a-z0-9]*[a-z0-9])?\\.)+((a[cdefgilmnoqrstuwxz]|aero|arpa)|(b[abdefghijmnorstvwyz]|biz)|(c[acdfghiklmnorsuvxyz]|cat|com|coop)|d[ejkmoz]|(e[ceghrstu]|edu)|f[ijkmor]|(g[abdefghilmnpqrstuwy]|gov)|h[kmnrtu]|(i[delmnoqrst]|info|int)|(j[emop]|jobs)|k[eghimnprwyz]|l[abcikrstuvy]|(m[acdghklmnopqrstuvwxyz]|mil|mobi|museum)|(n[acefgilopruz]|name|net)|(om|org)|(p[aefghklmnrstwy]|pro)|qa|r[eouw]|s[abcdeghijklmnortvyz]|(t[cdfghjklmnoprtvwz]|travel)|u[agkmsyz]|v[aceginu]|w[fs]|y[etu]|z[amw])$")
 
 Base = declarative_base()
+
+class DBBackedController(object):
+
+	def __init__(self, engine, session=None):
+
+		if type(engine) == types.StringType:
+			logging.info("Using connection string '%s'" % (engine,))
+			new_engine = create_engine(engine, encoding='utf-8')
+			if "sqlite:" in engine:
+				logging.debug("Setting text factory for unicode compat.")
+				new_engine.raw_connection().connection.text_factory = str 
+			self._engine = new_engine
+
+		else:
+			logging.info("Using existing engine...")
+			self._engine = engine
+
+		if session is None:
+			logging.info("Binding session...")
+			self._session = Session(bind=self._engine)
+		else:
+			self._session = session
+
+		logging.info("Updating metadata...")
+		Base.metadata.create_all(self._engine)
+
+	def commit(self):
+		logging.info("Commiting...")
+		self._session.commit()
 
 class CrawlSource(Base):
 
@@ -67,8 +95,8 @@ class CrawlFile(Base):
 
 class CrawlController(DBBackedController):
 
-	def __init__(self, engine):
-		super(CrawlController, self).__init__(engine, Base)
+	def __init__(self, engine, session = None):
+		super(CrawlController, self).__init__(engine, session)
 
 	def get_CrawlSource(self, key, limit=1):
 		ret = self._session.query(CrawlSource).filter_by(key=key).limit(limit)
@@ -134,6 +162,7 @@ class CrawlController(DBBackedController):
 			raise TypeError((src, type(src)))
 
 		self._session.add(src)
+
 class Domain(Base):
 
 	__tablename__ = 'domains'
@@ -176,8 +205,8 @@ class Domain(Base):
 
 class DomainController(DBBackedController):
 
-	def __init__(self, engine):
-		super(DomainController, self).__init__(engine, Base)
+	def __init__(self, engine, session = None):
+		super(DomainController, self).__init__(engine, session)
 
 	def get_Domain(self, key):
 		it = self._session.query(Domain).filter_by(key=key)
@@ -229,6 +258,11 @@ class Article(Base):
 
 	domain = relationship("Domain")
 
+	@validates('path', 'crawled', 'inserted', 'domain_id', 'status')
+	def validate(self, key, value):
+		assert value is not None
+		return value
+
 	@validates('path')
 	def validate_path(self, key, value):
 		if "http://" in value:
@@ -244,6 +278,9 @@ class Article(Base):
 		except ValueError:
 			return value 
 
+	def __str__(self):
+		return "Article(%s)" % ([self.id, self.path, self.crawled, self.inserted, self.crawl_id, self.domain_id, self.status])
+
 	def __init__(self, path, crawled, crawl_id, domain, status):
 		self.path = path 
 		self.crawled = crawled
@@ -254,8 +291,8 @@ class Article(Base):
 
 class ArticleController(DBBackedController):
 
-	def __init__(self, engine):
-		super(ArticleController, self).__init__(engine, Base)
+	def __init__(self, engine, session = None):
+		super(ArticleController, self).__init__(engine, session)
 
 	@classmethod
 	def get_path_fromurl(cls, url):
@@ -274,4 +311,221 @@ class ArticleController(DBBackedController):
 			raise TypeError(("Must be an Article", article, type(article)))
 
 		self._session.add(article)
+
+class Keyword(Base):
+
+	__tablename__ = 'keywords'
+	id 		= Column(Integer, Sequence('keyword_id_seq'), primary_key = True)
+	word    = Column(String(32), nullable = False, unique = True)
+
+	@validates('word')
+	def validate_keyword(self, key, word):
+		word = word.strip()
+
+		if len(word) <= 4:
+			raise ValueError("Word is too short to bother storing.")
+
+		valid = True 
+		for pos, char in enumerate(word):
+			valid = char >= 'a' and char <='z'
+			valid = valid or (char >= 'A' and char <='Z')
+			valid = valid or (char >= '0' and char <='9')
+			valid = valid or (char == ' ')
+			if not valid:
+				raise ValueError("Invalid character '%s' in '%s' at position %d", (char, word, pos))
+
+		return word 
+
+	def __init__(self, keyword):
+		self.word = keyword 
+
+	def __len__(self):
+		return len(self.word)
+
+#class KeywordIncidence(Base)
+
+class SoftwareVersion(Base):
+
+	__tablename__ = 'software'
+
+	id       = Column(Integer, Sequence('software_version_id_seq'), primary_key = True)
+	software = Column(String(256), unique = True)
+
+	@validates('software')
+	def validate_software_version(self, key, val):
+		val = val.strip()
+		assert len(val) > 0
+		return val
+
+	def __init__(self, version):
+		self.software = version 
+
+class SoftwareVersionsController(DBBackedController):
+
+	def __init__(self, engine, session = None):
+		super(SoftwareVersionsController, self).__init__(engine, session)
+
+	def get_SoftwareVersion_fromstr(self, version):
+		it = self._session.query(SoftwareVersion).filter_by(software = version)
+		try:
+			return it.one()
+		except NoResultFound:
+			return SoftwareVersion(version)
+
+class Document(Article):
+
+	__tablename__ = "documents"
+
+	id       = Column(Integer, Sequence('document_id_seq'), primary_key = True)
+	article  = Column(Integer, ForeignKey('articles.id'), nullable = False)
+	software = Column(Integer, ForeignKey('software.id'), nullable = False)
+	length   = Column(SmallInteger, nullable = False)
+	label    = Column(Enum("Positive", "Unknown", "Negative"), nullable = False)
+
+	pos_phrases = Column(SmallInteger, nullable = False)
+	neg_phrases = Column(SmallInteger, nullable = False)
+	pos_sentences = Column(SmallInteger, nullable = False)
+	neg_sentences = Column(SmallInteger, nullable = False)
+
+	parent   = relationship("Article")
+	classifier = relationship("SoftwareVersion")
+
+	@validates('prob')
+	def validate_prob(self, key, val):
+		assert val >= 0 and val <= 1
+		return val 
+
+	@validates('pos_phrases', 'neg_phrases', 'pos_sentences', 'neg_sentences')
+	def validate_scores(self, key, score):
+		assert score >= 0
+		return score
+
+	@validates('length')
+	def validate_length(self, key, length):
+		assert length > 0
+		return length
+
+	def __init__(self, parent, classifed_by, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases):
+
+		if not isinstance(parent, Article):
+			raise TypeError(("parent: should be Article", parent, type(parent)))
+
+		if not isinstance(classifed_by, SoftwareVersion):
+			raise TypeError(("classifed_by: should be SoftwareVersion", parent, type(parent)))
+
+		self.parent = parent
+		self.classifier = classifed_by
+
+		self.length = length 
+		self.pos_phrases   = pos_phrases
+		self.neg_phrases   = neg_phrases
+		self.pos_sentences = pos_sentences
+		self.neg_sentences = neg_sentences
+
+		# Set the label
+		if label == 1:
+			self.label = "Positive"
+		elif label == 0:
+			self.label = "Unknown"
+		elif label == -1:
+			self.label = "Negative"
+		else:
+			raise ValueError(("Invalid label", label))
+
+class Sentence(Base):
+
+	__tablename__ = 'sentences'
+
+	id       = Column(Integer, Sequence('sentence_id'), primary_key = True)
+	document = Column(Integer, ForeignKey('documents.id'), nullable = False )
+	score    = Column(Float, nullable = False)
+	prob     = Column(Float, nullable = False)
+	label    = Column(Enum("Positive", "Unknown", "Negative"), nullable = False)
+	level    = Column(Enum("H1", "H2", "H3", "H4", "H5", "H6", "P", "Other", "Unknown"), nullable = False)
+
+	parent   = relationship("Document", backref="phrases")
+
+	@validates('prob')
+	def validate_prob(self, key, val):
+		assert val >= 0 and val <= 1
+		return val 
+
+	@validates('score')
+	def validate_score(self, key, score):
+		assert score >= -1 and score <= 1
+		return score 
+
+	def __init__(self, parent, label, score, prob, level):
+
+		if not isinstance(parent, Document):
+			raise TypeError(("parent: should be Sentence", parent, type(parent)))
+
+		self.parent = parent
+
+		# Set the label
+		if label == 1:
+			self.label = "Positive"
+		elif label == 0:
+			self.label = "Unknown"
+		elif label == -1:
+			self.label = "Negative"
+		else:
+			raise ValueError(("Invalid label", label))
+
+		self.score = score 
+		self.prob  = prob
+
+class Phrase(Base):
+
+	__tablename__ = 'phrases'
+	id       = Column(Integer, Sequence('phrase_id_seq'), primary_key = True)
+	sentence = Column(Integer, ForeignKey("sentences.id"), nullable = False)
+	score    = Column(Float, nullable = False)
+	prob     = Column(Float, nullable = False)
+	label    = Column(Enum("Positive", "Unknown", "Negative"), nullable = False)
+
+	parent   = relationship("Sentence", backref="phrases")
+
+	@validates('prob')
+	def validate_prob(self, key, val):
+		assert val >= 0 and val <= 1
+		return val 
+
+	@validates('score')
+	def validate_score(self, key, score):
+		assert score >= -1 and score <= 1
+		return score 
+
+	def __init__(self, parent, score, prob, label):
+
+		if not isinstance(parent, Sentence):
+			raise TypeError(("parent: should be Sentence", parent, type(parent)))
+
+		self.parent = parent
+
+		# Set the label
+		if label == 1:
+			self.label = "Positive"
+		elif label == 0:
+			self.label = "Unknown"
+		elif label == -1:
+			self.label = "Negative"
+		else:
+			raise ValueError(("Invalid label", label))
+
+		self.score = score 
+		self.prob  = prob
+
+
+class KeywordController(DBBackedController):
+
+	def __init__(self, engine, session = None):
+		super(KeywordController, self).__init__(engine, session)
+
+	def get_Keyword(self, term):
+		it = self._session.query(Keyword).filter_by(word = term)
+		try:
+			return it.one()
+		except NoResultFound:
+			return Keyword(term)
 
