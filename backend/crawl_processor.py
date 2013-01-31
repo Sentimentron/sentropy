@@ -5,10 +5,15 @@ import itertools
 import logging
 import os
 import threading
+import types
 
-import nltk
+from collections import Counter
+
+import pysen.models
+
+from topia.termextract import extract
 from nltk.tokenize import sent_tokenize
-
+import nltk
 from lxml import etree
 from bs4 import BeautifulSoup
 from pysen.documents import DocumentClassifier
@@ -16,6 +21,31 @@ from pysen.documents import DocumentClassifier
 import pydate
 
 from db import Article, Domain, DomainController, ArticleController
+from db import Keyword, KeywordController
+
+KEYWORD_LIMIT = 1024
+
+class KeywordSet(object):
+
+	def __init__(self):
+		self.keywords = set([])
+
+	def __len__(self):
+		total = 0
+		for i in self.keywords:
+			total += len(i)
+		return total 
+
+	def __str__(self):
+		return "KeywordSet(%s)" % (str(self.keywords),)
+
+	def add(self, term):
+		if len(term) + len(self) > KEYWORD_LIMIT:
+			raise ValueError("KEYWORD_LIMIT exceeded.")
+		self.keywords.add(term)
+
+	def convert(self, kwc):
+		return [kwc.get_Keyword(t) for t in self.keywords]
 
 class CrawlProcessor(object):
 
@@ -24,6 +54,8 @@ class CrawlProcessor(object):
 		self.cls = DocumentClassifier()
 		self.dc  = DomainController(engine)
 		self.ac  = ArticleController(engine)
+		self.ex  = extract.TermExtractor()
+		self.kwc = KeywordController(engine)
 
 	def process_record(self, item):
 
@@ -31,6 +63,10 @@ class CrawlProcessor(object):
 
 		headers, content, url, date_crawled, content_type = [str(i) for i in record]
 		status = "Processed"
+		# Build database objects 
+		domain = self.dc.get_Domain_fromurl(url)
+		path   = self.ac.get_path_fromurl(url)
+		article = Article(path, date_crawled, crawl_id, domain, status)
 
 		try:
 			if content_type != 'text/html':
@@ -60,10 +96,21 @@ class CrawlProcessor(object):
 			if worker_req_thread.result == None:
 				raise ValueError("NoContent")
 
-			content = worker_req_thread.result
+			content = worker_req_thread.result.encode('ascii', 'ignore')
 
 			# Run keyword extraction 
+			keywords = self.ex(content)
+			kset     = KeywordSet()
+			nnp_sets_scored = set([])
+
+			for word, freq, amnt in sorted(keywords):
+				try:
+					nnp_sets_scored.add((word, freq))
+				except ValueError:
+					break 
+
 			nnp_sets = set([])
+			nnp_vector = []
 			for sentence in sent_tokenize(content):
 				text = nltk.word_tokenize(sentence)
 				pos  = nltk.pos_tag(text)
@@ -73,32 +120,54 @@ class CrawlProcessor(object):
 						continue
 					nnp_list = [word for word, pos in g]
 					nnp_len  = min(3, len(nnp_list))
-					cur = 1 
+					cur = 1
 					while cur <= nnp_len:
 						for combo in itertools.combinations(nnp_list, cur):
-							# TODO: map to keywords here
 							nnp_sets.add(combo)
+							for n in combo:
+								nnp_vector.append(n)
 						cur += 1
 
+			nnp_counter = Counter(nnp_vector)
 			for item in nnp_sets:
-				raw_input(item)
+				score = 0
+				for word in item:
+					score += nnp_counter[word]
+				nnp_sets_scored.add((item, score*1.0 / len(item)))
 
+			for item, score in sorted(nnp_sets_scored, key=lambda x: x[1], reverse=True):
+				try: 
+					if type(item) == types.ListType or type(item) == types.TupleType:
+						kset.add(' '.join(item))
+					else:
+						kset.add(item)
+				except ValueError:
+					break 
 
 			# Run sentiment analysis
-			trace = {}
+			trace = []
 			features = self.cls.classify(worker_req_thread.result, trace) 
+
+			# Convert Pysen's model into database models
+			for sentence, score, phrase_trace in trace:
+				sentence_type = "Unknown"
+
+				for node in html.findAll(text=True):
+					if sentence.text in node.strip():
+						sentence_type = node.parent.name
+						break
+
+				
+
+
 
 		except ValueError as ex:
 			status = ex.message
 
-		# Build database objects 
-		domain = self.dc.get_Domain_fromurl(url)
-		path   = self.ac.get_path_fromurl(url)
-
 		logging.debug("Domain: %s", domain)
 		logging.debug("Path: %s", path)
 
-		article = Article(path, date_crawled, crawl_id, domain, status)
+		article.status = status
 		self.ac.attach_Article(article)
 
 		# Commit to database, return True on success
