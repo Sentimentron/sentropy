@@ -414,6 +414,63 @@ class SoftwareInvolvementRecord(Base):
 		self.software = software 
 		self.document = document 
 
+class CertainDate(Base):
+
+	__tablename__ = 'certain_dates'
+
+	id 		= Column(Integer, Sequence('certain_date_id_seq'), primary_key = True)
+	date 	= Column(DateTime, nullable = False)
+	doc_id 	= Column(Integer, ForeignKey("documents.id"), nullable = False)
+
+	def __init__(self, date, document):
+
+		if not isinstance(document, Document):
+			raise TypeError(("document: Not a Document", document, type(document)))
+
+		self.document = document 
+		self.date = date 
+
+class AmbiguousDate(Base):
+
+	__tablename__ = 'uncertain_dates'
+
+	MAX_FRAG_LEN = 32
+
+	id 		= Column(Integer, Sequence('certain_date_id_seq'), primary_key = True)
+	date 	= Column(DateTime, nullable = False)
+	doc_id 	= Column(Integer, ForeignKey("documents.id"), nullable = False)
+	interpreted_with 	= Column(Enum("DayFirstYearFirst", "DayFirstYearSecond", "DaySecondYearFirst", "DaySecondYearSecond"), nullable = False)
+	matched_text 		= Column(String(MAX_FRAG_LEN), nullable = False)
+
+	@validates('matched_text')
+	def validate_text(self, key, value):
+		value = value.strip()
+		if len(value) > 0:
+			if len(value) <= self.MAX_FRAG_LEN:
+				return value 
+			raise ValueError(("Too long", value))
+		raise ValueError(("Too short", value))
+
+	def __init__(self, date, document, day_first, year_first, text):
+
+		if not isinstance(document, Document):
+			raise TypeError(("document: Not a Document", document, type(document)))
+
+		if day_first:
+			if year_first:
+				self.interpreted_with = "DayFirstYearFirst"
+			else:
+				self.interpreted_with = "DayFirstYearSecond"
+		else:
+			if year_first:
+				self.interpreted_with = "DaySecondYearFirst"
+			else:
+				self.interpreted_with = "DaySecondYearSecond"
+
+		self.date = date 
+		self.document = document
+		self.matched_text = text
+
 class Document(Base):
 
 	__tablename__ = "documents"
@@ -430,6 +487,8 @@ class Document(Base):
 
 	sentences = relationship("Sentence", backref="parent")
 	involved  = relationship("SoftwareInvolvementRecord", backref="document")
+	certain_dates = relationship("CertainDate", backref="document")
+	uncertain_dates = relationship("AmbiguousDate", backref="document")
 
 	@validates('prob')
 	def validate_prob(self, key, val):

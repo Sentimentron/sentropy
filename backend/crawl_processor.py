@@ -27,6 +27,7 @@ from db import Keyword, KeywordController
 from db import SoftwareVersionsController
 from db import Document, Sentence, Phrase
 from db import KeywordIncidence, SoftwareInvolvementRecord
+from db import CertainDate, AmbiguousDate
 
 KEYWORD_LIMIT = 1024
 
@@ -143,8 +144,7 @@ class CrawlProcessor(object):
 
 		# Extract the dates 
 		date_dict = pydate.get_dates(html)
-		for item in date_dict:
-			raw_input(item)
+
 		if len(date_dict) == 0:
 			status = "NoDates"
 
@@ -211,8 +211,8 @@ class CrawlProcessor(object):
 		pos_phrases, neg_phrases  = features[0:7]
 
 		# Convert Pysen's model into database models
-		d = Document(article, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases)
-		self._session.add(d)
+		doc = Document(article, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases)
+		self._session.add(doc)
 		extracted_phrases = set([])
 		for sentence, score, phrase_trace in trace:
 			sentence_type = "Unknown"
@@ -226,7 +226,7 @@ class CrawlProcessor(object):
 
 			label, average, prob, pos, neg, probs, _scores = score 
 
-			s = Sentence(d, label, average, prob, sentence_type)
+			s = Sentence(doc, label, average, prob, sentence_type)
 			self._session.add(s)
 			for phrase, prob, score, label in phrase_trace:
 				p = Phrase(s, score, prob, label)
@@ -242,22 +242,35 @@ class CrawlProcessor(object):
 				if k.word in p.get_text():
 					nk = KeywordIncidence(k, p_obj)
 
-		# Construct software involvment records
-		self_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(self.__VERSION__), "Processed", d)
-		date_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(pydate.__VERSION__), "Dated", d)
-		clas_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(pysen.__VERSION__), "Classified", d)
-		extr_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(worker_req_thread.version, "Extracted", d))
+		# Build date objects
+		for key in date_dict:
+			rec  = date_dict[key]
+			if "dates" not in rec:
+				logging.error("OK: 'dates' is not in a pydate result record.")
+				continue
+			dlen = len(rec["dates"])
+			if dlen > 1:
+				for date, day_first, year_first in rec["dates"]:
+					dobj = AmbiguousDate(date, doc, day_first, year_first, rec["prep"])
+					self._session.add(dobj)
+			elif dlen == 1:
+				for date, day_first, year_first in rec["dates"]:
+					dobj = CertainDate(date, doc)
+					self._session.add(dobj)
+			else:
+				logging.error("'dates' in a pydate result set contains no records.")
 
-		self._session.add_all([self_sir, date_sir, clas_sir])
+		# Construct software involvment records
+		self_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(self.__VERSION__), "Processed", doc)
+		date_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(pydate.__VERSION__), "Dated", doc)
+		clas_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(pysen.__VERSION__), "Classified", doc)
+		extr_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(worker_req_thread.version), "Extracted", doc)
+
+		self._session.add_all([self_sir, date_sir, clas_sir, extr_sir])
 
 		logging.debug("Domain: %s", domain)
 		logging.debug("Path: %s", path)
 		article.status = status
-
-		#self._session.add(domain)
-		#self._session.add(article)
-		#self._session.add(d)
-		#self.ac.attach_Article(article)
 
 		# Commit to database, return True on success
 		self._session.commit()
