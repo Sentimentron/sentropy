@@ -266,14 +266,22 @@ class KeywordIncidence(Base):
 
 class Keyword(Base):
 
+	MAX_LENGTH = 32
+
 	__tablename__ = 'keywords'
 	id 		= Column(Integer, Sequence('keyword_id_seq'), primary_key = True)
-	word    = Column(String(32), nullable = False, unique = True)
+	word    = Column(String(MAX_LENGTH), nullable = False, unique = True)
 	incidences = relationship("KeywordIncidence", backref="keyword")
 
 	@validates('word')
 	def validate_keyword(self, key, word):
 		word = word.strip()
+
+		if len(word) == 0:
+			raise ValueError(("Too short", word))
+
+		if len(word) > self.MAX_LENGTH:
+			raise ValueError(("Too long", word))
 
 		valid = True 
 		for pos, char in enumerate(word):
@@ -282,7 +290,7 @@ class Keyword(Base):
 			valid = valid or (char >= '0' and char <='9')
 			valid = valid or (char == ' ')
 			if not valid:
-				raise ValueError("Invalid character '%s' in '%s' at position %d", (char, word, pos))
+				raise ValueError("Invalid character '%s' in '%s' at position %d" % (char, word, pos))
 
 		return word 
 
