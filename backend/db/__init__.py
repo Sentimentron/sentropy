@@ -5,3 +5,4 @@ from crawl import KeywordController, Document, Sentence, Phrase
 from crawl import SoftwareVersion, SoftwareVersionsController
 from crawl import KeywordIncidence, SoftwareInvolvementRecord
 from crawl import CertainDate, AmbiguousDate
+from crawl import KeywordAdjacency, RelativeLink, AbsoluteLink

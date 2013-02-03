@@ -163,89 +163,6 @@ class CrawlController(DBBackedController):
 
 		self._session.add(src)
 
-class Domain(Base):
-
-	__tablename__ = 'domains'
-
-	id 		= Column(Integer, Sequence('domain_id_seq'), primary_key = True)
-	key 	= Column(String(255), nullable = False, unique = True)
-	date    = Column(DateTime, nullable = False)
-
-	articles = relationship("Article", backref="domain")
-
-	@classmethod
-	def is_valid(cls, value):
-		if re.match(KEY_VAL, value) is None:
-			raise ValueError(("Not a valid domain", value))
-		if value[0] == '.':
-			raise ValueError(("Not a valid domain", value))
-		if len(value) > 255:
-			raise ValueError(("Domain is too long", value))
-
-	@validates('key')
-	def validate_domain_key(self, key, value):
-		self.is_valid(value)
-
-		return value 
-
-	@validates('date')
-	def validate_date(self, key, value):
-		if type(value) is not datetime:
-			raise TypeError(("Not a datetime", value, type(value)))
-
-		return value
-
-	def __str__(self):
-		return "Domain(%s)" % (self.key,)
-
-	def __repr__(self):
-		return "Domain(%s|%s)" % (self.key, self.date)
-
-	def __init__(self, key):
-		self.key = key 
-		self.date = datetime.now()
-
-class DomainController(DBBackedController):
-
-	def __init__(self, engine, session = None):
-		super(DomainController, self).__init__(engine, session)
-
-	def get_Domain(self, key):
-		it = self._session.query(Domain).filter_by(key=key)
-		try:
-			it = it.one()
-		except NoResultFound:
-			return None 
-
-		return it
-
-	def get_Domain_fromurl(self, url):
-		orig = url
-		if "http://" in url:
-			url = url[7:]
-
-		for pos, char in enumerate(url):
-			if char == '/':
-				break
-
-		key = url[:pos]
-
-		# Search the database
-		d = self.get_Domain(key)
-		if d is None:
-			d = Domain(key)
-			self.attach_Domain(d)
-			return d
-
-		return d
-
-
-	def attach_Domain(self, domain):
-		if type(domain) != Domain:
-			raise TypeError("Not a domain: %s" % (domain,))
-
-		self._session.add(domain)
-
 class KeywordIncidence(Base):
 
 	__tablename__ = 'keyword_incidences'
@@ -350,11 +267,13 @@ class KeywordController(DBBackedController):
 		super(KeywordController, self).__init__(engine, session)
 
 	def get_Keyword(self, term):
-		ret = Keyword(term)
 		it = self._session.query(Keyword).filter_by(word = term)
 		try:
 			return it.one()
 		except NoResultFound:
+			logging.debug("NoResultFound for %s" % (term,))
+			ret = Keyword(term)
+			self._session.add(ret)
 			return ret
 
 class Sentence(Base):
@@ -479,6 +398,96 @@ class AmbiguousDate(Base):
 		self.document = document
 		self.matched_text = text
 
+class KeywordAdjacency(Base):
+
+	__tablename__ = "keyword_adjacencies"
+
+	id 		= Column(Integer, Sequence('keyword_adj_seq'), primary_key = True)
+	doc_id  = Column(Integer, ForeignKey("documents.id"), nullable = False)
+	key1_id = Column(Integer, ForeignKey("keywords.id"), nullable = False)
+	key2_id = Column(Integer, ForeignKey("keywords.id"), nullable = True)
+
+	key1 = relationship("Keyword", foreign_keys=[key1_id])
+	key2 = relationship("Keyword", foreign_keys=[key2_id])
+
+	def __init__(self, key1, key2, document):
+		if not isinstance(document, Document):
+			raise TypeError(("document: Not a Document", document, type(document)))
+
+		for pos, key in enumerate([key1, key2]):
+			if not isinstance(key, Keyword):
+				raise TypeError(("key%d: Must be a Keyword" % (pos+1,), key, type(key)))
+
+		self.document = document 
+		self.key1 = key1 
+		self.key2 = key2
+
+
+class RelativeLink(Base):
+
+	__tablename__ = 'links_relative'
+
+	id          = Column(Integer, Sequence('internal_link_id_seq'), primary_key = True)
+	path        = Column(String(1024), nullable = False)
+	document_id = Column(Integer, ForeignKey("documents.id"), nullable = False)
+
+	@validates('path')
+	def validate(self, key, path):
+
+		if len(path) == 0:
+			raise ValueError("Path is too short")
+		if len(path) > 1024:
+			raise ValueError(("Path is too long", path))
+
+		if "http://" in path or "://" in path:
+			raise ValueError(("RelativeLinks should not contain a prefix", path))
+		return path
+
+	def __str__(self):
+		return "RelativeLink(%s)" % (self.path,)
+
+	def __init__(self, document, path): 
+		if not isinstance(document, Document):
+			raise TypeError(("document: Not a Document", document, type(document)))
+
+		self.document = document 
+		self.path     = path 
+
+class AbsoluteLink(Base):
+
+	__tablename__ = 'links_absolute'
+
+	id          = Column(Integer, Sequence('internal_link_id_seq'), primary_key = True)
+	path        = Column(String(1024), nullable = False)
+	domain_id   = Column(Integer, ForeignKey("domains.id"), nullable = False)
+	document_id = Column(Integer, ForeignKey("documents.id"), nullable = False)
+
+	@validates('path')
+	def validate(self, key, path):
+		path = path.strip()
+		if len(path) == 0:
+			raise ValueError("Path is too short")
+		if len(path) > 1024:
+			raise ValueError(("Path is too long", path))
+
+		if "http://" in path or "://" in path:
+			raise ValueError(("AbsoluteLinks should not contain a prefix", path))
+		return path
+
+	def __str__(self):
+		return "AbsoluteLink (%s/%s)" % (self.domain.key, self.path)
+
+	def __init__(self, document, domain, path): 
+		if not isinstance(document, Document):
+			raise TypeError(("document: Not a Document", document, type(document)))
+
+		if not isinstance(domain, Domain):
+			raise TypeError(("domain: Not a Domain", domain, type(domain)))
+
+		self.document = document 
+		self.path     = path 
+		self.domain   = domain
+
 class Document(Base):
 
 	__tablename__ = "documents"
@@ -497,6 +506,11 @@ class Document(Base):
 	involved  = relationship("SoftwareInvolvementRecord", backref="document")
 	certain_dates = relationship("CertainDate", backref="document")
 	uncertain_dates = relationship("AmbiguousDate", backref="document")
+	keyword_adjacencies = relationship("KeywordAdjacency", backref="document")
+
+	relative_links = relationship("RelativeLink", backref="document")
+	absolute_links = relationship("AbsoluteLink", backref="document")
+
 
 	@validates('prob')
 	def validate_prob(self, key, val):
@@ -632,3 +646,91 @@ class SoftwareVersionsController(DBBackedController):
 			return it.one()
 		except NoResultFound:
 			return SoftwareVersion(version)
+
+class Domain(Base):
+
+	__tablename__ = 'domains'
+
+	id 		= Column(Integer, Sequence('domain_id_seq'), primary_key = True)
+	key 	= Column(String(255), nullable = False, unique = True)
+	date    = Column(DateTime, nullable = False)
+
+	articles = relationship("Article", backref="domain")
+	absolute_links = relationship("AbsoluteLink", backref="domain")
+
+	@classmethod
+	def is_valid(cls, value):
+		value = value.strip()
+		if len(value) == 0:
+			raise ValueError(("Domain is too short", value))
+		if re.match(KEY_VAL, value) is None:
+			raise ValueError(("Not a valid domain", value))
+		if value[0] == '.':
+			raise ValueError(("Not a valid domain", value))
+		if len(value) > 255:
+			raise ValueError(("Domain is too long", value))
+
+
+	@validates('key')
+	def validate_domain_key(self, key, value):
+		self.is_valid(value)
+
+		return value 
+
+	@validates('date')
+	def validate_date(self, key, value):
+		if type(value) is not datetime:
+			raise TypeError(("Not a datetime", value, type(value)))
+
+		return value
+
+	def __str__(self):
+		return "Domain(%s)" % (self.key,)
+
+	def __repr__(self):
+		return "Domain(%s|%s)" % (self.key, self.date)
+
+	def __init__(self, key):
+		self.key = key 
+		self.date = datetime.now()
+
+class DomainController(DBBackedController):
+
+	def __init__(self, engine, session = None):
+		super(DomainController, self).__init__(engine, session)
+
+	def get_Domain(self, key):
+		it = self._session.query(Domain).filter_by(key=key)
+		try:
+			it = it.one()
+		except NoResultFound:
+			return None 
+
+		return it
+
+	def get_Domain_fromurl(self, url):
+		orig = url
+		if "http://" in url:
+			url = url[7:]
+
+		for pos, char in enumerate(url):
+			if char == '/':
+				break
+
+		key = url[:pos]
+
+		# Search the database
+		d = self.get_Domain(key)
+		if d is None:
+			d = Domain(key)
+			self.attach_Domain(d)
+			return d
+
+		return d
+
+
+	def attach_Domain(self, domain):
+		if type(domain) != Domain:
+			raise TypeError("Not a domain: %s" % (domain,))
+
+		self._session.add(domain)

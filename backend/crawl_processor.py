@@ -27,7 +27,8 @@ from db import Keyword, KeywordController
 from db import SoftwareVersionsController
 from db import Document, Sentence, Phrase
 from db import KeywordIncidence, SoftwareInvolvementRecord
-from db import CertainDate, AmbiguousDate
+from db import CertainDate, AmbiguousDate, KeywordAdjacency
+from db import RelativeLink, AbsoluteLink
 
 KEYWORD_LIMIT = 1024
 
@@ -36,6 +37,7 @@ class KeywordSet(object):
 	def __init__(self, stop_list):
 		self.keywords = set([])
 		self.stop_list = stop_list
+		self._cache = {}
 
 	def __len__(self):
 		return len(self.keywords)
@@ -60,12 +62,30 @@ class KeywordSet(object):
 
 		return False 
 
+	def convert_adj_tuples(self, tuple_list, kwc):
+
+		ret = []
+
+
+		for i, j in tuple_list:
+			try:
+				i, j = i.lower().strip(), j.lower().strip()
+				i = kwc.get_Keyword(i)
+				j = kwc.get_Keyword(j)
+				ret.append((i,j))
+			except ValueError as ex:
+				logging.error(ex)
+		return ret
+
+
 	def convert(self, kwc):
 		ret = []
 		short = []
 		for t in self.keywords:
 			try:
-				ret.append(kwc.get_Keyword(t))
+				k = kwc.get_Keyword(t)
+				ret.append(k)
+				self._cache[t] = k
 			except ValueError as ex:
 				logging.error(ex)
 
@@ -169,7 +189,8 @@ class CrawlProcessor(object):
 			except ValueError:
 				break 
 
-		nnp_sets = set([])
+		nnp_adj = set([])
+		nnp_set = set([])
 		nnp_vector = []
 		for sentence in sent_tokenize(content):
 			text = nltk.word_tokenize(sentence)
@@ -178,22 +199,19 @@ class CrawlProcessor(object):
 			for k, g in pos_groups:
 				if k != 'NNP':
 					continue
-				nnp_list = [word for word, pos in g]
-				nnp_len  = min(3, len(nnp_list))
-				cur = 1
-				while cur <= nnp_len:
-					for combo in itertools.combinations(nnp_list, cur):
-						nnp_sets.add(combo)
-						for n in combo:
-							nnp_vector.append(n)
-					cur += 1
+				nnp_list = [word for word, speech in g]
+				nnp_buf = []
+				for item in nnp_list:
+					nnp_set.add(item)
+					nnp_buf.append(item)
+					nnp_vector.append(item)
+				for i, j in zip(nnp_buf[0:-1], nnp_buf[1:]):
+					nnp_adj.add((i, j))
 
 		nnp_counter = Counter(nnp_vector)
-		for item in nnp_sets:
-			score = 0
-			for word in item:
-				score += nnp_counter[word]
-			nnp_sets_scored.add((item, score*1.0 / len(item)))
+		for word in nnp_set:
+			score = nnp_counter[word]
+			nnp_sets_scored.add((item, score))
 
 		for item, score in sorted(nnp_sets_scored, key=lambda x: x[1], reverse=True):
 			try: 
@@ -242,6 +260,11 @@ class CrawlProcessor(object):
 				if k.word in p.get_text():
 					nk = KeywordIncidence(k, p_obj)
 
+		# Save the keyword adjacency list
+		for i, j in kset.convert_adj_tuples(nnp_adj, self.kwc):
+			kwa = KeywordAdjacency(i, j, doc)
+			self._session.add(kwa)
+
 		# Build date objects
 		for key in date_dict:
 			rec  = date_dict[key]
@@ -259,6 +282,43 @@ class CrawlProcessor(object):
 					self._session.add(dobj)
 			else:
 				logging.error("'dates' in a pydate result set contains no records.")
+
+		# Process links
+		for link in html.findAll('a'):
+			if not link.has_attr("href"):
+				logging.debug("skipping %s: no href", link)
+				continue
+
+			process = True 
+			for node in link.findAll(text=True):
+				if node not in worker_req_thread.result:
+					process = False 
+					break 
+			
+			if not process:
+				logging.debug("skipping %s because it's not in the body text", link)
+				break
+
+			href, junk, junk = link["href"].partition("#")
+			if "http://" in href:
+				try:
+					href_domain = self.dc.get_Domain_fromurl(href)
+				except ValueError as ex:
+					logging.error(ex)
+					logging.error("Skipping this link")
+				href_path   = self.ac.get_path_fromurl(href)
+				lnk = AbsoluteLink(doc, href_domain, href_path)
+				self._session.add(lnk)
+				logging.debug("Adding: %s", lnk)
+			else:
+				href_path  = href 
+				try:
+					lnk = RelativeLink(doc, href_path)
+				except ValueError as ex:
+					logging.error(ex)
+					logging.error("Skipping link")
+				self._session.add(lnk)
+				logging.debug("Adding: %s", lnk)
 
 		# Construct software involvment records
 		self_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(self.__VERSION__), "Processed", doc)
