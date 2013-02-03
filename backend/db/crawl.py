@@ -496,6 +496,7 @@ class Document(Base):
 	article_id  = Column(Integer, ForeignKey('articles.id'), nullable = False)
 	length      = Column(SmallInteger, nullable = False)
 	label       = Column(Enum("Positive", "Unknown", "Negative"), nullable = False)
+	headline    = Column(String(256), nullable = False)
 
 	pos_phrases = Column(SmallInteger, nullable = False)
 	neg_phrases = Column(SmallInteger, nullable = False)
@@ -514,20 +515,31 @@ class Document(Base):
 
 	@validates('prob')
 	def validate_prob(self, key, val):
-		assert val >= 0 and val <= 1
+		if val < 0 or val > 1:
+			raise ValueError(("Invalid probability", val))
 		return val 
 
 	@validates('pos_phrases', 'neg_phrases', 'pos_sentences', 'neg_sentences')
 	def validate_scores(self, key, score):
-		assert score >= 0
+		if score < 0:
+			raise ValueError(("Scores shouldn't be negative", key, score))
 		return score
 
 	@validates('length')
 	def validate_length(self, key, length):
-		assert length > 0
+		if length == 0:
+			raise ValueError("Needs more length.")
 		return length
 
-	def __init__(self, parent, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases):
+	@validates('headline')
+	def validate_headline(self, key, headline):
+		if len(headline) == 0:
+			raise ValueError("Headline is too short")
+		if len(headline) > 256:
+			raise ValueError("Headline is too long")
+		return headline 
+
+	def __init__(self, parent, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases, headline):
 
 		if not isinstance(parent, Article):
 			raise TypeError(("parent: should be Article", parent, type(parent)))
@@ -539,6 +551,7 @@ class Document(Base):
 		self.neg_phrases   = neg_phrases
 		self.pos_sentences = pos_sentences
 		self.neg_sentences = neg_sentences
+		self.headline = headline
 
 		# Set the label
 		if label == 1:
@@ -560,7 +573,7 @@ class Article(Base):
 	inserted= Column(DateTime, nullable = False)
 	crawl_id= Column(Integer, ForeignKey("crawl_files.id"), nullable = True)
 	domain_id = Column(Integer, ForeignKey("domains.id"), nullable = False)
-	status  = Column(Enum("Processed", "NoDates", "NoContent", "UnsupportedType", "OtherError"), nullable = False)
+	status  = Column(Enum("Processed", "NoDates", "NoContent", "UnsupportedType", "ClassificationError", "OtherError"), nullable = False)
 
 	documents = relationship("Document", backref="parent")
 

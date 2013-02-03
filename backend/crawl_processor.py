@@ -176,6 +176,21 @@ class CrawlProcessor(object):
 		if worker_req_thread.result == None:
 			raise ValueError("NoContent")
 
+		# Headline extraction 
+		h_counter = 6
+		headline = ""
+		while h_counter > 0:
+			tag = "h%d" % (h_counter,)
+			found = False 
+			for node in html.findAll(tag):
+				if node.text in worker_req_thread.result:
+					headline = node.text 
+					found = True 
+					break 
+			if found:
+				break
+			h_counter -= 1
+
 		content = worker_req_thread.result.encode('ascii', 'ignore')
 
 		# Run keyword extraction 
@@ -229,7 +244,17 @@ class CrawlProcessor(object):
 		pos_phrases, neg_phrases  = features[0:7]
 
 		# Convert Pysen's model into database models
-		doc = Document(article, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases)
+		try:
+			doc = Document(article, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases, headline)
+		except ValueError as ex:
+			logging.error(ex)
+			logging.error("Skipping this document...")
+			self._session.rollback()
+			article.status = "ClassificationError"
+			self._session.add(article)
+			self._session.commit()
+			return False
+
 		self._session.add(doc)
 		extracted_phrases = set([])
 		for sentence, score, phrase_trace in trace:
