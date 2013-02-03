@@ -171,6 +171,8 @@ class Domain(Base):
 	key 	= Column(String(255), nullable = False, unique = True)
 	date    = Column(DateTime, nullable = False)
 
+	articles = relationship("Article", backref="domain")
+
 	@classmethod
 	def is_valid(cls, value):
 		if re.match(KEY_VAL, value) is None:
@@ -244,6 +246,212 @@ class DomainController(DBBackedController):
 
 		self._session.add(domain)
 
+class KeywordIncidence(Base):
+
+	__tablename__ = 'keyword_incidences'
+	id 		   = Column(Integer, Sequence('keywordincidence_id_seq'), primary_key = True)
+	keyword_id = Column(Integer, ForeignKey('keywords.id'), nullable = False)
+	phrase_id  = Column(Integer, ForeignKey('phrases.id'),  nullable = False)
+
+	def __init__(self, keyword, phrase):
+
+		if not isinstance(keyword, Keyword):
+			raise TypeError(("Must be a Keyword", keyword, type(keyword)))
+
+		if not isinstance(phrase, Phrase):
+			raise TypeError(("Must be a Phase", phrase, type(phrase)))
+
+		self.keyword = keyword
+		self.phrase  = phrase 
+
+class Keyword(Base):
+
+	__tablename__ = 'keywords'
+	id 		= Column(Integer, Sequence('keyword_id_seq'), primary_key = True)
+	word    = Column(String(32), nullable = False, unique = True)
+	incidences = relationship("KeywordIncidence", backref="keyword")
+
+	@validates('word')
+	def validate_keyword(self, key, word):
+		word = word.strip()
+
+		valid = True 
+		for pos, char in enumerate(word):
+			valid = char >= 'a' and char <='z'
+			valid = valid or (char >= 'A' and char <='Z')
+			valid = valid or (char >= '0' and char <='9')
+			valid = valid or (char == ' ')
+			if not valid:
+				raise ValueError("Invalid character '%s' in '%s' at position %d", (char, word, pos))
+
+		return word 
+
+	def __init__(self, keyword):
+		self.word = keyword 
+
+	def __len__(self):
+		return len(self.word)
+
+	def __str__(self):
+		return "Keyword(%s)" % (self.word)
+
+class Phrase(Base):
+
+	__tablename__ = 'phrases'
+	id       = Column(Integer, Sequence('phrase_id_seq'), primary_key = True)
+	sentence = Column(Integer, ForeignKey("sentences.id"), nullable = False)
+	score    = Column(Float, nullable = False)
+	prob     = Column(Float, nullable = False)
+	label    = Column(Enum("Positive", "Unknown", "Negative"), nullable = False)
+
+	keyword_incidences = relationship("KeywordIncidence", backref="phrase")
+
+	@validates('prob')
+	def validate_prob(self, key, val):
+		assert val >= 0 and val <= 1
+		return val 
+
+	@validates('score')
+	def validate_score(self, key, score):
+		assert score >= -1 and score <= 1
+		return score 
+
+	def __init__(self, parent, score, prob, label):
+
+		if not isinstance(parent, Sentence):
+			raise TypeError(("parent: should be Sentence", parent, type(parent)))
+
+		self.parent = parent
+
+		# Set the label
+		if label == 1:
+			self.label = "Positive"
+		elif label == 0:
+			self.label = "Unknown"
+		elif label == -1:
+			self.label = "Negative"
+		else:
+			raise ValueError(("Invalid label", label))
+
+		self.score = score 
+		self.prob  = prob
+
+class KeywordController(DBBackedController):
+
+	def __init__(self, engine, session = None):
+		super(KeywordController, self).__init__(engine, session)
+
+	def get_Keyword(self, term):
+		ret = Keyword(term)
+		it = self._session.query(Keyword).filter_by(word = term)
+		try:
+			return it.one()
+		except NoResultFound:
+			return ret
+
+class Sentence(Base):
+
+	__tablename__ = 'sentences'
+
+	id       = Column(Integer, Sequence('sentence_id'), primary_key = True)
+	document = Column(Integer, ForeignKey('documents.id'), nullable = False )
+	score    = Column(Float, nullable = False)
+	prob     = Column(Float, nullable = False)
+	label    = Column(Enum("Positive", "Unknown", "Negative"), nullable = False)
+	level    = Column(Enum("H1", "H2", "H3", "H4", "H5", "H6", "P", "Other", "Unknown"), nullable = False)
+
+	phrases = relationship("Phrase", backref="parent")
+
+	@validates('prob')
+	def validate_prob(self, key, val):
+		assert val >= 0 and val <= 1
+		return val 
+
+	@validates('score')
+	def validate_score(self, key, score):
+		assert score >= -1 and score <= 1
+		return score 
+
+	def __init__(self, parent, label, score, prob, level):
+
+		if not isinstance(parent, Document):
+			raise TypeError(("parent: should be Sentence", parent, type(parent)))
+
+		self.parent = parent
+
+		# Set the label
+		if label == 1:
+			self.label = "Positive"
+		elif label == 0:
+			self.label = "Unknown"
+		elif label == -1:
+			self.label = "Negative"
+		else:
+			raise ValueError(("Invalid label", label))
+
+		self.score = score 
+		self.prob  = prob
+		self.level = level
+
+class Document(Base):
+
+	__tablename__ = "documents"
+
+	id          = Column(Integer, Sequence('document_id_seq'), primary_key = True)
+	article_id  = Column(Integer, ForeignKey('articles.id'), nullable = False)
+	software_id = Column(Integer, ForeignKey('software.id'), nullable = False)
+	length      = Column(SmallInteger, nullable = False)
+	label       = Column(Enum("Positive", "Unknown", "Negative"), nullable = False)
+
+	pos_phrases = Column(SmallInteger, nullable = False)
+	neg_phrases = Column(SmallInteger, nullable = False)
+	pos_sentences = Column(SmallInteger, nullable = False)
+	neg_sentences = Column(SmallInteger, nullable = False)
+
+	sentences = relationship("Sentence", backref="parent")
+
+	@validates('prob')
+	def validate_prob(self, key, val):
+		assert val >= 0 and val <= 1
+		return val 
+
+	@validates('pos_phrases', 'neg_phrases', 'pos_sentences', 'neg_sentences')
+	def validate_scores(self, key, score):
+		assert score >= 0
+		return score
+
+	@validates('length')
+	def validate_length(self, key, length):
+		assert length > 0
+		return length
+
+	def __init__(self, parent, classifed_by, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases):
+
+		if not isinstance(parent, Article):
+			raise TypeError(("parent: should be Article", parent, type(parent)))
+
+		if not isinstance(classifed_by, SoftwareVersion):
+			raise TypeError(("classifed_by: should be SoftwareVersion", parent, type(parent)))
+
+		self.parent = parent
+		self.classifier = classifed_by
+
+		self.length = length 
+		self.pos_phrases   = pos_phrases
+		self.neg_phrases   = neg_phrases
+		self.pos_sentences = pos_sentences
+		self.neg_sentences = neg_sentences
+
+		# Set the label
+		if label == 1:
+			self.label = "Positive"
+		elif label == 0:
+			self.label = "Unknown"
+		elif label == -1:
+			self.label = "Negative"
+		else:
+			raise ValueError(("Invalid label", label))
+
 class Article(Base):
 
 	__tablename__ = 'articles'
@@ -256,7 +464,7 @@ class Article(Base):
 	domain_id = Column(Integer, ForeignKey("domains.id"), nullable = False)
 	status  = Column(Enum("Processed", "NoDates", "NoContent", "UnsupportedType", "OtherError"), nullable = False)
 
-	domain = relationship("Domain")
+	documents = relationship("Document", backref="parent")
 
 	@validates('path')
 	def validate_path(self, key, value):
@@ -311,63 +519,14 @@ class ArticleController(DBBackedController):
 
 		self._session.add(article)
 
-class Keyword(Base):
-
-	__tablename__ = 'keywords'
-	id 		= Column(Integer, Sequence('keyword_id_seq'), primary_key = True)
-	word    = Column(String(32), nullable = False, unique = True)
-
-	@validates('word')
-	def validate_keyword(self, key, word):
-		word = word.strip()
-
-		valid = True 
-		for pos, char in enumerate(word):
-			valid = char >= 'a' and char <='z'
-			valid = valid or (char >= 'A' and char <='Z')
-			valid = valid or (char >= '0' and char <='9')
-			valid = valid or (char == ' ')
-			if not valid:
-				raise ValueError("Invalid character '%s' in '%s' at position %d", (char, word, pos))
-
-		return word 
-
-	def __init__(self, keyword):
-		self.word = keyword 
-
-	def __len__(self):
-		return len(self.word)
-
-	def __str__(self):
-		return "Keyword(%s)" % (self.word)
-
-class KeywordIncidence(Base):
-
-	__tablename__ = 'keyword_incidences'
-	id 		   = Column(Integer, Sequence('keywordincidence_id_seq'), primary_key = True)
-	keyword_id = Column(Integer, ForeignKey('keywords.id'), nullable = False)
-	phrase_id  = Column(Integer, ForeignKey('phrases.id'),  nullable = False)
-
-	keyword    = relationship('Keyword')
-	phrase     = relationship('Phrase')
-
-	def __init__(self, keyword, phrase):
-
-		if not isinstance(keyword, Keyword):
-			raise TypeError(("Must be a Keyword", keyword, type(keyword)))
-
-		if not isinstance(phrase, Phrase):
-			raise TypeError(("Must be a Phase", phrase, type(phrase)))
-
-		self.keyword = keyword
-		self.phrase  = phrase 
-
 class SoftwareVersion(Base):
 
 	__tablename__ = 'software'
 
 	id       = Column(Integer, Sequence('software_version_id_seq'), primary_key = True)
 	software = Column(String(256), unique = True)
+
+	classified = relationship("Document", backref="classifier")
 
 	@validates('software')
 	def validate_software_version(self, key, val):
@@ -389,162 +548,3 @@ class SoftwareVersionsController(DBBackedController):
 			return it.one()
 		except NoResultFound:
 			return SoftwareVersion(version)
-
-class Document(Article):
-
-	__tablename__ = "documents"
-
-	id       = Column(Integer, Sequence('document_id_seq'), primary_key = True)
-	article  = Column(Integer, ForeignKey('articles.id'), nullable = False)
-	software = Column(Integer, ForeignKey('software.id'), nullable = False)
-	length   = Column(SmallInteger, nullable = False)
-	label    = Column(Enum("Positive", "Unknown", "Negative"), nullable = False)
-
-	pos_phrases = Column(SmallInteger, nullable = False)
-	neg_phrases = Column(SmallInteger, nullable = False)
-	pos_sentences = Column(SmallInteger, nullable = False)
-	neg_sentences = Column(SmallInteger, nullable = False)
-
-	parent   = relationship("Article")
-	classifier = relationship("SoftwareVersion")
-
-	@validates('prob')
-	def validate_prob(self, key, val):
-		assert val >= 0 and val <= 1
-		return val 
-
-	@validates('pos_phrases', 'neg_phrases', 'pos_sentences', 'neg_sentences')
-	def validate_scores(self, key, score):
-		assert score >= 0
-		return score
-
-	@validates('length')
-	def validate_length(self, key, length):
-		assert length > 0
-		return length
-
-	def __init__(self, parent, classifed_by, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases):
-
-		if not isinstance(parent, Article):
-			raise TypeError(("parent: should be Article", parent, type(parent)))
-
-		if not isinstance(classifed_by, SoftwareVersion):
-			raise TypeError(("classifed_by: should be SoftwareVersion", parent, type(parent)))
-
-		self.parent = parent
-		self.classifier = classifed_by
-
-		self.length = length 
-		self.pos_phrases   = pos_phrases
-		self.neg_phrases   = neg_phrases
-		self.pos_sentences = pos_sentences
-		self.neg_sentences = neg_sentences
-
-		# Set the label
-		if label == 1:
-			self.label = "Positive"
-		elif label == 0:
-			self.label = "Unknown"
-		elif label == -1:
-			self.label = "Negative"
-		else:
-			raise ValueError(("Invalid label", label))
-
-class Sentence(Base):
-
-	__tablename__ = 'sentences'
-
-	id       = Column(Integer, Sequence('sentence_id'), primary_key = True)
-	document = Column(Integer, ForeignKey('documents.id'), nullable = False )
-	score    = Column(Float, nullable = False)
-	prob     = Column(Float, nullable = False)
-	label    = Column(Enum("Positive", "Unknown", "Negative"), nullable = False)
-	level    = Column(Enum("H1", "H2", "H3", "H4", "H5", "H6", "P", "Other", "Unknown"), nullable = False)
-
-	parent   = relationship("Document", backref="sentences")
-
-	@validates('prob')
-	def validate_prob(self, key, val):
-		assert val >= 0 and val <= 1
-		return val 
-
-	@validates('score')
-	def validate_score(self, key, score):
-		assert score >= -1 and score <= 1
-		return score 
-
-	def __init__(self, parent, label, score, prob, level):
-
-		if not isinstance(parent, Document):
-			raise TypeError(("parent: should be Sentence", parent, type(parent)))
-
-		self.parent = parent
-
-		# Set the label
-		if label == 1:
-			self.label = "Positive"
-		elif label == 0:
-			self.label = "Unknown"
-		elif label == -1:
-			self.label = "Negative"
-		else:
-			raise ValueError(("Invalid label", label))
-
-		self.score = score 
-		self.prob  = prob
-
-class Phrase(Base):
-
-	__tablename__ = 'phrases'
-	id       = Column(Integer, Sequence('phrase_id_seq'), primary_key = True)
-	sentence = Column(Integer, ForeignKey("sentences.id"), nullable = False)
-	score    = Column(Float, nullable = False)
-	prob     = Column(Float, nullable = False)
-	label    = Column(Enum("Positive", "Unknown", "Negative"), nullable = False)
-
-	parent   = relationship("Sentence", backref="phrases")
-
-	@validates('prob')
-	def validate_prob(self, key, val):
-		assert val >= 0 and val <= 1
-		return val 
-
-	@validates('score')
-	def validate_score(self, key, score):
-		assert score >= -1 and score <= 1
-		return score 
-
-	def __init__(self, parent, score, prob, label):
-
-		if not isinstance(parent, Sentence):
-			raise TypeError(("parent: should be Sentence", parent, type(parent)))
-
-		self.parent = parent
-
-		# Set the label
-		if label == 1:
-			self.label = "Positive"
-		elif label == 0:
-			self.label = "Unknown"
-		elif label == -1:
-			self.label = "Negative"
-		else:
-			raise ValueError(("Invalid label", label))
-
-		self.score = score 
-		self.prob  = prob
-
-
-class KeywordController(DBBackedController):
-
-	def __init__(self, engine, session = None):
-		super(KeywordController, self).__init__(engine, session)
-
-	def get_Keyword(self, term):
-		ret = Keyword(term)
-		it = self._session.query(Keyword).filter_by(word = term)
-		try:
-			return it.one()
-		except NoResultFound:
-			return ret
-
