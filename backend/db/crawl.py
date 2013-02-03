@@ -496,7 +496,7 @@ class Document(Base):
 	article_id  = Column(Integer, ForeignKey('articles.id'), nullable = False)
 	length      = Column(SmallInteger, nullable = False)
 	label       = Column(Enum("Positive", "Unknown", "Negative"), nullable = False)
-	headline    = Column(String(256), nullable = False)
+	headline    = Column(String(256), nullable = True)
 
 	pos_phrases = Column(SmallInteger, nullable = False)
 	neg_phrases = Column(SmallInteger, nullable = False)
@@ -533,13 +533,15 @@ class Document(Base):
 
 	@validates('headline')
 	def validate_headline(self, key, headline):
+		if headline is None:
+			return None
 		if len(headline) == 0:
-			raise ValueError("Headline is too short")
+			return None 
 		if len(headline) > 256:
-			raise ValueError("Headline is too long")
+			return None
 		return headline 
 
-	def __init__(self, parent, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases, headline):
+	def __init__(self, parent, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases, headline=None):
 
 		if not isinstance(parent, Article):
 			raise TypeError(("parent: should be Article", parent, type(parent)))

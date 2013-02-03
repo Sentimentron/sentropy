@@ -54,7 +54,7 @@ class KeywordSet(object):
 		if len(self) > KEYWORD_LIMIT:
 			raise ValueError("KEYWORD_LIMIT exceeded.")
 
-		term = term.lower().strip()
+		term = term.strip()
 
 		if not term in self.stop_list:
 			self.keywords.add(term)
@@ -69,7 +69,7 @@ class KeywordSet(object):
 
 		for i, j in tuple_list:
 			try:
-				i, j = i.lower().strip(), j.lower().strip()
+				i, j = i.strip(), j.strip()
 				i = kwc.get_Keyword(i)
 				j = kwc.get_Keyword(j)
 				ret.append((i,j))
@@ -178,7 +178,7 @@ class CrawlProcessor(object):
 
 		# Headline extraction 
 		h_counter = 6
-		headline = ""
+		headline = None
 		while h_counter > 0:
 			tag = "h%d" % (h_counter,)
 			found = False 
