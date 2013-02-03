@@ -353,7 +353,7 @@ class Sentence(Base):
 
 	__tablename__ = 'sentences'
 
-	id       = Column(Integer, Sequence('sentence_id'), primary_key = True)
+	id       = Column(Integer, Sequence('sentence_id_seq'), primary_key = True)
 	document = Column(Integer, ForeignKey('documents.id'), nullable = False )
 	score    = Column(Float, nullable = False)
 	prob     = Column(Float, nullable = False)
@@ -393,13 +393,33 @@ class Sentence(Base):
 		self.prob  = prob
 		self.level = level
 
+class SoftwareInvolvementRecord(Base):
+
+	__tablename__ = "software_involvements"
+
+	id          = Column(Integer, Sequence('sinvolved_id_seq'), primary_key = True)
+	document_id = Column(Integer, ForeignKey("documents.id"), nullable = False)
+	software_id = Column(Integer, ForeignKey("software.id"), nullable = False)
+	action      = Column(Enum("Classified", "Dated", "Processed", "Other"), nullable = False)
+
+	def __init__(self, software, action, document):
+
+		if not isinstance(document, Document):
+			raise TypeError(("Not a Document", document, type(document)))
+
+		if not isinstance(software, SoftwareVersion):
+			raise TypeError(("Not a SoftwareVersion", software, type(software)))
+
+		self.action = action 
+		self.software = software 
+		self.document = document 
+
 class Document(Base):
 
 	__tablename__ = "documents"
 
 	id          = Column(Integer, Sequence('document_id_seq'), primary_key = True)
 	article_id  = Column(Integer, ForeignKey('articles.id'), nullable = False)
-	software_id = Column(Integer, ForeignKey('software.id'), nullable = False)
 	length      = Column(SmallInteger, nullable = False)
 	label       = Column(Enum("Positive", "Unknown", "Negative"), nullable = False)
 
@@ -409,6 +429,7 @@ class Document(Base):
 	neg_sentences = Column(SmallInteger, nullable = False)
 
 	sentences = relationship("Sentence", backref="parent")
+	involved  = relationship("SoftwareInvolvementRecord", backref="document")
 
 	@validates('prob')
 	def validate_prob(self, key, val):
@@ -425,16 +446,12 @@ class Document(Base):
 		assert length > 0
 		return length
 
-	def __init__(self, parent, classifed_by, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases):
+	def __init__(self, parent, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases):
 
 		if not isinstance(parent, Article):
 			raise TypeError(("parent: should be Article", parent, type(parent)))
 
-		if not isinstance(classifed_by, SoftwareVersion):
-			raise TypeError(("classifed_by: should be SoftwareVersion", parent, type(parent)))
-
 		self.parent = parent
-		self.classifier = classifed_by
 
 		self.length = length 
 		self.pos_phrases   = pos_phrases
@@ -526,7 +543,7 @@ class SoftwareVersion(Base):
 	id       = Column(Integer, Sequence('software_version_id_seq'), primary_key = True)
 	software = Column(String(256), unique = True)
 
-	classified = relationship("Document", backref="classifier")
+	involved_with = relationship("SoftwareInvolvementRecord", backref="software")
 
 	@validates('software')
 	def validate_software_version(self, key, val):

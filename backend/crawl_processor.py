@@ -26,7 +26,7 @@ from db import Article, Domain, DomainController, ArticleController
 from db import Keyword, KeywordController
 from db import SoftwareVersionsController
 from db import Document, Sentence, Phrase
-from db import KeywordIncidence
+from db import KeywordIncidence, SoftwareInvolvementRecord
 
 KEYWORD_LIMIT = 1024
 
@@ -71,6 +71,8 @@ class KeywordSet(object):
 		return ret, short
 
 class CrawlProcessor(object):
+
+	__VERSION__ = "CrawlProcessor-0.1"
 
 	def __init__(self, engine, stop_list="keyword_filter.txt"):
 
@@ -208,7 +210,7 @@ class CrawlProcessor(object):
 		pos_phrases, neg_phrases  = features[0:7]
 
 		# Convert Pysen's model into database models
-		d = Document(article, classified_by, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases)
+		d = Document(article, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases)
 		self._session.add(d)
 		extracted_phrases = set([])
 		for sentence, score, phrase_trace in trace:
@@ -238,6 +240,12 @@ class CrawlProcessor(object):
 			for k in keyword_objects:
 				if k.word in p.get_text():
 					nk = KeywordIncidence(k, p_obj)
+
+		# Construct software involvment records
+		self_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(self.__VERSION__), "Processed", d)
+		date_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(pydate.__VERSION__), "Dated", d)
+		clas_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(pysen.__VERSION__), "Classified", d)
+		self._session.add_all([self_sir, date_sir, clas_sir])
 
 		logging.debug("Domain: %s", domain)
 		logging.debug("Path: %s", path)
