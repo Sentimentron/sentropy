@@ -258,11 +258,6 @@ class Article(Base):
 
 	domain = relationship("Domain")
 
-	@validates('path', 'crawled', 'inserted', 'domain_id', 'status')
-	def validate(self, key, value):
-		assert value is not None
-		return value
-
 	@validates('path')
 	def validate_path(self, key, value):
 		if "http://" in value:
@@ -282,12 +277,16 @@ class Article(Base):
 		return "Article(%s)" % ([self.id, self.path, self.crawled, self.inserted, self.crawl_id, self.domain_id, self.status])
 
 	def __init__(self, path, crawled, crawl_id, domain, status):
+
+		if not isinstance(domain, Domain):
+			raise TypeError(("Must be a Domain", domain, type(domain)))
+
 		self.path = path 
 		self.crawled = crawled
 		self.crawl_id = crawl_id
 		self.status = status
 		self.inserted = datetime.now()
-		self.domain_id = domain.id
+		self.domain = domain
 
 class ArticleController(DBBackedController):
 
@@ -322,9 +321,6 @@ class Keyword(Base):
 	def validate_keyword(self, key, word):
 		word = word.strip()
 
-		if len(word) <= 4:
-			raise ValueError("Word is too short to bother storing.")
-
 		valid = True 
 		for pos, char in enumerate(word):
 			valid = char >= 'a' and char <='z'
@@ -342,7 +338,29 @@ class Keyword(Base):
 	def __len__(self):
 		return len(self.word)
 
-#class KeywordIncidence(Base)
+	def __str__(self):
+		return "Keyword(%s)" % (self.word)
+
+class KeywordIncidence(Base):
+
+	__tablename__ = 'keyword_incidences'
+	id 		   = Column(Integer, Sequence('keywordincidence_id_seq'), primary_key = True)
+	keyword_id = Column(Integer, ForeignKey('keywords.id'), nullable = False)
+	phrase_id  = Column(Integer, ForeignKey('phrases.id'),  nullable = False)
+
+	keyword    = relationship('Keyword')
+	phrase     = relationship('Phrase')
+
+	def __init__(self, keyword, phrase):
+
+		if not isinstance(keyword, Keyword):
+			raise TypeError(("Must be a Keyword", keyword, type(keyword)))
+
+		if not isinstance(phrase, Phrase):
+			raise TypeError(("Must be a Phase", phrase, type(phrase)))
+
+		self.keyword = keyword
+		self.phrase  = phrase 
 
 class SoftwareVersion(Base):
 
@@ -443,7 +461,7 @@ class Sentence(Base):
 	label    = Column(Enum("Positive", "Unknown", "Negative"), nullable = False)
 	level    = Column(Enum("H1", "H2", "H3", "H4", "H5", "H6", "P", "Other", "Unknown"), nullable = False)
 
-	parent   = relationship("Document", backref="phrases")
+	parent   = relationship("Document", backref="sentences")
 
 	@validates('prob')
 	def validate_prob(self, key, val):
@@ -523,9 +541,10 @@ class KeywordController(DBBackedController):
 		super(KeywordController, self).__init__(engine, session)
 
 	def get_Keyword(self, term):
+		ret = Keyword(term)
 		it = self._session.query(Keyword).filter_by(word = term)
 		try:
 			return it.one()
 		except NoResultFound:
-			return Keyword(term)
+			return ret
 

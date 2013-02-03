@@ -26,34 +26,54 @@ from db import Article, Domain, DomainController, ArticleController
 from db import Keyword, KeywordController
 from db import SoftwareVersionsController
 from db import Document, Sentence, Phrase
+from db import KeywordIncidence
 
 KEYWORD_LIMIT = 1024
 
 class KeywordSet(object):
 
-	def __init__(self):
+	def __init__(self, stop_list):
 		self.keywords = set([])
+		self.stop_list = stop_list
 
 	def __len__(self):
-		total = 0
-		for i in self.keywords:
-			total += len(i)
-		return total 
+		return len(self.keywords)
 
 	def __str__(self):
 		return "KeywordSet(%s)" % (str(self.keywords),)
 
+	def __iter__(self):
+		for item in self.keywords:
+			yield item
+
 	def add(self, term):
-		if len(term) + len(self) > KEYWORD_LIMIT:
+		
+		if len(self) > KEYWORD_LIMIT:
 			raise ValueError("KEYWORD_LIMIT exceeded.")
-		self.keywords.add(term)
+
+		term = term.lower().strip()
+
+		if not term in self.stop_list:
+			self.keywords.add(term)
+			return True 
+
+		return False 
 
 	def convert(self, kwc):
-		return [kwc.get_Keyword(t) for t in self.keywords]
+		ret = []
+		short = []
+		for t in self.keywords:
+			try:
+				ret.append(kwc.get_Keyword(t))
+			except ValueError as ex:
+				logging.error(ex)
+
+		return ret, short
 
 class CrawlProcessor(object):
 
-	def __init__(self, engine):
+	def __init__(self, engine, stop_list="keyword_filter.txt"):
+
 		if type(engine) == types.StringType:
 			logging.info("Using connection string '%s'" % (engine,))
 			new_engine = create_engine(engine, encoding='utf-8')
@@ -65,7 +85,16 @@ class CrawlProcessor(object):
 			logging.info("Using existing engine...")
 			self._engine = engine
 		logging.info("Binding session...")
-		self._session = Session(bind=self._engine)
+		self._session = Session(bind=self._engine, autocommit=False)
+
+		if type(stop_list) == types.StringType:
+			stop_list_fp = open(stop_list)
+		else:
+			stop_list_fp = stop_list 
+
+		self.stop_list = set([])
+		for line in stop_list_fp:
+			self.stop_list.add(line.strip())
 
 		self.cls = DocumentClassifier()
 		self.dc  = DomainController(self._engine, self._session)
@@ -87,7 +116,9 @@ class CrawlProcessor(object):
 
 		status = "Processed"
 		# Build database objects 
+		self._session.begin(subtransactions=True)
 		domain = self.dc.get_Domain_fromurl(url)
+		self._session.commit()
 		path   = self.ac.get_path_fromurl(url)
 		article = Article(path, date_crawled, crawl_id, domain, status)
 		print article
@@ -97,6 +128,7 @@ class CrawlProcessor(object):
 		if content_type != 'text/html':
 			logging.error("Unsupported content type: %s", str(row))
 			raise ValueError("UnsupportedType")
+
 		logging.debug(content)
 		logging.debug(url)
 		# Start the async transaction to get the plain text
@@ -125,7 +157,7 @@ class CrawlProcessor(object):
 
 		# Run keyword extraction 
 		keywords = self.ex(content)
-		kset     = KeywordSet()
+		kset     = KeywordSet(self.stop_list)
 		nnp_sets_scored = set([])
 
 		for word, freq, amnt in sorted(keywords):
@@ -177,6 +209,8 @@ class CrawlProcessor(object):
 
 		# Convert Pysen's model into database models
 		d = Document(article, classified_by, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases)
+		self._session.add(d)
+		extracted_phrases = set([])
 		for sentence, score, phrase_trace in trace:
 			sentence_type = "Unknown"
 			for node in html.findAll(text=True):
@@ -190,17 +224,28 @@ class CrawlProcessor(object):
 			label, average, prob, pos, neg, probs, _scores = score 
 
 			s = Sentence(d, label, average, prob, sentence_type)
+			self._session.add(s)
 			for phrase, prob, score, label in phrase_trace:
 				p = Phrase(s, score, prob, label)
+				self._session.add(p)
+				extracted_phrases.add((phrase, p))
+
+		# Associate extracted keywords with phrases
+		keyword_objects, short_keywords = kset.convert(self.kwc)
+		for k in keyword_objects:
+			self._session.add(k)
+		for p, p_obj in extracted_phrases:
+			for k in keyword_objects:
+				if k.word in p.get_text():
+					nk = KeywordIncidence(k, p_obj)
 
 		logging.debug("Domain: %s", domain)
 		logging.debug("Path: %s", path)
-		print article
 		article.status = status
-		print article
 
+		#self._session.add(domain)
 		#self._session.add(article)
-		self._session.flush()
+		#self._session.add(d)
 		#self.ac.attach_Article(article)
 
 		# Commit to database, return True on success
