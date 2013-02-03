@@ -400,7 +400,7 @@ class SoftwareInvolvementRecord(Base):
 	id          = Column(Integer, Sequence('sinvolved_id_seq'), primary_key = True)
 	document_id = Column(Integer, ForeignKey("documents.id"), nullable = False)
 	software_id = Column(Integer, ForeignKey("software.id"), nullable = False)
-	action      = Column(Enum("Classified", "Dated", "Processed", "Other"), nullable = False)
+	action      = Column(Enum("Classified", "Dated", "Processed", "Extracted", "Other"), nullable = False)
 
 	def __init__(self, software, action, document):
 

@@ -143,7 +143,8 @@ class CrawlProcessor(object):
 
 		# Extract the dates 
 		date_dict = pydate.get_dates(html)
-		logging.debug(date_dict)
+		for item in date_dict:
+			raw_input(item)
 		if len(date_dict) == 0:
 			status = "NoDates"
 
@@ -245,6 +246,8 @@ class CrawlProcessor(object):
 		self_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(self.__VERSION__), "Processed", d)
 		date_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(pydate.__VERSION__), "Dated", d)
 		clas_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(pysen.__VERSION__), "Classified", d)
+		extr_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(worker_req_thread.version, "Extracted", d))
+
 		self._session.add_all([self_sir, date_sir, clas_sir])
 
 		logging.debug("Domain: %s", domain)
