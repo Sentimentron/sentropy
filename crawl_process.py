@@ -29,7 +29,7 @@ if __name__ == "__main__":
 	records = []
 
 	if testing:
-		for record in list(r.read_CrawlFileSQL('tmpSYh7nw', False))[0:2]:
+		for record in list(r.read_CrawlFileSQL('tmpSYh7nw', False))[170:]:
 			records.append((None, record))
 	else:
 		for i in q:

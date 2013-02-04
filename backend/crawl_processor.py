@@ -18,6 +18,7 @@ from lxml import etree
 from bs4 import BeautifulSoup
 from pysen.documents import DocumentClassifier
 
+import langid
 import pydate
 import pysen
 import pysen.models
@@ -152,7 +153,6 @@ class CrawlProcessor(object):
             article.status = "UnsupportedType"
             return False
 
-        logging.debug(content)
         logging.debug(url)
         # Start the async transaction to get the plain text
         worker_req_thread = BoilerPipeWorker(content)
@@ -168,6 +168,9 @@ class CrawlProcessor(object):
         if len(date_dict) == 0:
             status = "NoDates"
 
+        # Detect the language
+        lang, lang_certainty = langid.classify(content)
+
         # Wait for the BoilerPipe thread to complete
         worker_req_thread.join()
         logging.debug(worker_req_thread.result)
@@ -177,6 +180,15 @@ class CrawlProcessor(object):
             article.status = "NoContent"
             return False
 
+        # If the language isn't English, skip it
+        if lang != "en":
+            logging.info("language: %s with certainty %.2f - skipping...", lang, lang_certainty)
+            article.status = "NoContent" # Replace with something appropriate
+            return False
+
+
+        content = worker_req_thread.result.encode('ascii', 'ignore')
+
         # Headline extraction 
         h_counter = 6
         headline = None
@@ -184,15 +196,13 @@ class CrawlProcessor(object):
             tag = "h%d" % (h_counter,)
             found = False 
             for node in html.findAll(tag):
-                if node.text in worker_req_thread.result:
+                if node.text in content:
                     headline = node.text 
                     found = True 
                     break 
             if found:
                 break
             h_counter -= 1
-
-        content = worker_req_thread.result.encode('ascii', 'ignore')
 
         # Run keyword extraction 
         keywords = self.ex(content)
