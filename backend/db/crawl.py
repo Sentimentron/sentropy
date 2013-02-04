@@ -246,8 +246,6 @@ class Phrase(Base):
 		if not isinstance(parent, Sentence):
 			raise TypeError(("parent: should be Sentence", parent, type(parent)))
 
-		self.parent = parent
-
 		# Set the label
 		if label == 1:
 			self.label = "Positive"
@@ -260,6 +258,8 @@ class Phrase(Base):
 
 		self.score = score 
 		self.prob  = prob
+		self.parent = parent
+
 
 class KeywordController(DBBackedController):
 
@@ -304,8 +304,6 @@ class Sentence(Base):
 		if not isinstance(parent, Document):
 			raise TypeError(("parent: should be Sentence", parent, type(parent)))
 
-		self.parent = parent
-
 		# Set the label
 		if label == 1:
 			self.label = "Positive"
@@ -319,6 +317,8 @@ class Sentence(Base):
 		self.score = score 
 		self.prob  = prob
 		self.level = level
+		self.parent = parent
+
 
 class SoftwareInvolvementRecord(Base):
 
@@ -354,8 +354,9 @@ class CertainDate(Base):
 		if not isinstance(document, Document):
 			raise TypeError(("document: Not a Document", document, type(document)))
 
-		self.document = document 
 		self.date = date 
+		self.document = document 
+
 
 class AmbiguousDate(Base):
 
@@ -395,8 +396,9 @@ class AmbiguousDate(Base):
 				self.interpreted_with = "DaySecondYearSecond"
 
 		self.date = date 
-		self.document = document
 		self.matched_text = text
+		self.document = document
+
 
 class KeywordAdjacency(Base):
 
@@ -450,8 +452,8 @@ class RelativeLink(Base):
 		if not isinstance(document, Document):
 			raise TypeError(("document: Not a Document", document, type(document)))
 
-		self.document = document 
 		self.path     = path 
+		self.document = document 
 
 class AbsoluteLink(Base):
 
@@ -484,9 +486,10 @@ class AbsoluteLink(Base):
 		if not isinstance(domain, Domain):
 			raise TypeError(("domain: Not a Domain", domain, type(domain)))
 
-		self.document = document 
 		self.path     = path 
 		self.domain   = domain
+		self.document = document 
+
 
 class Document(Base):
 
@@ -511,7 +514,6 @@ class Document(Base):
 
 	relative_links = relationship("RelativeLink", backref="document")
 	absolute_links = relationship("AbsoluteLink", backref="document")
-
 
 	@validates('prob')
 	def validate_prob(self, key, val):
@@ -546,8 +548,6 @@ class Document(Base):
 		if not isinstance(parent, Article):
 			raise TypeError(("parent: should be Article", parent, type(parent)))
 
-		self.parent = parent
-
 		self.length = length 
 		self.pos_phrases   = pos_phrases
 		self.neg_phrases   = neg_phrases
@@ -564,6 +564,9 @@ class Document(Base):
 			self.label = "Negative"
 		else:
 			raise ValueError(("Invalid label", label))
+
+		self.parent = parent
+
 
 class Article(Base):
 

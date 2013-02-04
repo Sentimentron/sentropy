@@ -144,13 +144,13 @@ class CrawlProcessor(object):
 		self._session.commit()
 		path   = self.ac.get_path_fromurl(url)
 		article = Article(path, date_crawled, crawl_id, domain, status)
-		print article
 		classified_by = self.swc.get_SoftwareVersion_fromstr(pysen.__VERSION__)
 		assert classified_by is not None
 
 		if content_type != 'text/html':
 			logging.error("Unsupported content type: %s", str(row))
-			raise ValueError("UnsupportedType")
+			article.status = "UnsupportedType"
+			return False
 
 		logging.debug(content)
 		logging.debug(url)
@@ -174,7 +174,8 @@ class CrawlProcessor(object):
 		logging.debug(worker_req_thread.version)
 
 		if worker_req_thread.result == None:
-			raise ValueError("NoContent")
+			article.status = "NoContent"
+			return False
 
 		# Headline extraction 
 		h_counter = 6
@@ -249,10 +250,7 @@ class CrawlProcessor(object):
 		except ValueError as ex:
 			logging.error(ex)
 			logging.error("Skipping this document...")
-			self._session.rollback()
 			article.status = "ClassificationError"
-			self._session.add(article)
-			self._session.commit()
 			return False
 
 		self._session.add(doc)
@@ -358,6 +356,10 @@ class CrawlProcessor(object):
 		article.status = status
 
 		# Commit to database, return True on success
+		self._session.commit()
+		return True
+
+	def finalize(self):
 		self._session.commit()
 
 
