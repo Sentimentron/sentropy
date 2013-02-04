@@ -63,32 +63,35 @@ class KeywordSet(object):
 
         return False 
 
-    def convert_adj_tuples(self, tuple_list, kwc):
+    def convert_adj_tuples(self, tuple_list, keyword_map, kwc):
 
         ret = []
-
 
         for i, j in tuple_list:
             try:
                 i, j = i.strip(), j.strip()
-                i = kwc.get_Keyword(i)
-                j = kwc.get_Keyword(j)
+                i = kwc.get_Keyword_fromId(keyword_map[i])
+                j = kwc.get_Keyword_fromId(keyword_map[j])
                 ret.append((i,j))
             except ValueError as ex:
                 logging.error(ex)
+            except KeyError as ex:
+                logging.info(ex)
         return ret
 
 
-    def convert(self, kwc):
+    def convert(self, keyword_map, kwc):
         ret = []
         short = []
         for t in self.keywords:
             try:
-                k = kwc.get_Keyword(t)
+                ident = keyword_map[t]
+                k = kwc.get_Keyword_fromId(ident)
                 ret.append(k)
-                self._cache[t] = k
             except ValueError as ex:
                 logging.error(ex)
+            except KeyError as ex:
+                logging.info(ex)
 
         return ret, short
 
@@ -248,11 +251,37 @@ class CrawlProcessor(object):
             except ValueError:
                 break 
 
+        # Generate list of all keywords
+        keywords = set([])
+        for keyword in kset:
+            try:
+                k = Keyword(keyword)
+                keywords.add(k)
+            except ValueError as ex:
+                logging.error(ex)
+                continue
+        for item1, item2 in nnp_adj:
+            try:
+                k = Keyword(item1)
+                keywords.add(k)
+            except ValueError as ex:
+                logging.error(ex)
+            try:
+                k = Keyword(item2)
+                keywords.add(k)
+            except ValueError as ex:
+                logging.error(ex)
+
+        # Resolve keyword identifiers
+        keyword_resolution_worker = KeywordResolutionWorker([k.word for k in keywords])
+        keyword_resolution_worker.start()
+            
+
         # Run sentiment analysis
         trace = []
         features = self.cls.classify(worker_req_thread.result, trace) 
         label, length, classified, pos_sentences, neg_sentences,\
-        pos_phrases, neg_phrases  = features[0:7]
+        pos_phrases, neg_phrases  = features[0:7]        
 
         # Convert Pysen's model into database models
         try:
@@ -284,17 +313,23 @@ class CrawlProcessor(object):
                 self._session.add(p)
                 extracted_phrases.add((phrase, p))
 
+        # Wait for keyword resolution to finish
+        keyword_resolution_worker.join()
+        keyword_mapping = keyword_resolution_worker.out_keywords
+
         # Associate extracted keywords with phrases
-        keyword_objects, short_keywords = kset.convert(self.kwc)
+        keyword_objects, short_keywords = kset.convert(keyword_mapping, self.kwc)
         for k in keyword_objects:
-            self._session.add(k)
+            self._session.merge(k)
         for p, p_obj in extracted_phrases:
             for k in keyword_objects:
                 if k.word in p.get_text():
                     nk = KeywordIncidence(k, p_obj)
 
         # Save the keyword adjacency list
-        for i, j in kset.convert_adj_tuples(nnp_adj, self.kwc):
+        for i, j in kset.convert_adj_tuples(nnp_adj, keyword_mapping, self.kwc):
+            self._session.merge(i)
+            self._session.merge(j)
             kwa = KeywordAdjacency(i, j, doc)
             self._session.add(kwa)
 
@@ -373,6 +408,43 @@ class CrawlProcessor(object):
 
     def finalize(self):
         self._session.commit()
+
+class KeywordResolutionWorker(threading.Thread):
+
+    def __init__(self, keywords):
+        self.in_keywords  = keywords
+        self.out_keywords = {}
+        threading.Thread.__init__(self)
+
+
+    def run(self):
+        import MySQLdb as mdb
+        # Open the mysqldatabase connection
+        logging.info("Keyword resolution: opening DB...")
+        host = os.environ["SENT_DB_URL"]
+        user = os.environ["SENT_DB_USER"]
+        pswd = os.environ["SENT_DB_PASS"]
+        con = mdb.connect(host, user, pswd, "sentimentron")
+
+        # Create the 1st-phase query
+        sql = "INSERT IGNORE INTO keywords (`word`) VALUES (%s)"
+
+        cur = con.cursor()
+        logging.info("Keyword resolution: 1st-phase INSERT")
+        #logging.debug(self.in_keywords)
+        cur.executemany(sql, [(k,) for k in self.in_keywords])
+        con.commit()
+
+        # Now the 2nd-phase, getting the IDs
+        sql = "SELECT id FROM keywords WHERE `word` = %s"
+        for key in self.in_keywords:
+            cur.execute(sql, (key,))
+            identifier, = cur.fetchone()
+            thing = (key, identifier)
+            logging.debug(thing)
+            self.out_keywords[key] = identifier
+
+
 
 
 class BoilerPipeWorker(threading.Thread):

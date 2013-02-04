@@ -266,6 +266,9 @@ class KeywordController(DBBackedController):
 	def __init__(self, engine, session = None):
 		super(KeywordController, self).__init__(engine, session)
 
+	def get_Keyword_fromId(self, id):
+		return self._session.query(Keyword).get(id)		
+
 	def get_Keyword(self, term):
 		it = self._session.query(Keyword).filter_by(word = term)
 		try:
