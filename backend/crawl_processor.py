@@ -56,7 +56,7 @@ class KeywordSet(object):
 
 		term = term.strip()
 
-		if not term in self.stop_list:
+		if not term.lower() in self.stop_list:
 			self.keywords.add(term)
 			return True 
 
@@ -108,7 +108,7 @@ class CrawlProcessor(object):
 			logging.info("Using existing engine...")
 			self._engine = engine
 		logging.info("Binding session...")
-		self._session = Session(bind=self._engine, autocommit=False)
+		self._session = Session(bind=self._engine, autocommit = False)
 
 		if type(stop_list) == types.StringType:
 			stop_list_fp = open(stop_list)
@@ -148,7 +148,7 @@ class CrawlProcessor(object):
 		assert classified_by is not None
 
 		if content_type != 'text/html':
-			logging.error("Unsupported content type: %s", str(row))
+			logging.error("Unsupported content type: %s", str(content_type))
 			article.status = "UnsupportedType"
 			return False
 
@@ -329,6 +329,7 @@ class CrawlProcessor(object):
 				except ValueError as ex:
 					logging.error(ex)
 					logging.error("Skipping this link")
+					continue
 				href_path   = self.ac.get_path_fromurl(href)
 				lnk = AbsoluteLink(doc, href_domain, href_path)
 				self._session.add(lnk)
@@ -340,6 +341,7 @@ class CrawlProcessor(object):
 				except ValueError as ex:
 					logging.error(ex)
 					logging.error("Skipping link")
+					continue
 				self._session.add(lnk)
 				logging.debug("Adding: %s", lnk)
 
