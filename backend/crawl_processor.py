@@ -415,7 +415,14 @@ class CrawlProcessor(object):
             href, junk, junk = link["href"].partition("#")
             if "http://" in href:
                 try:
-                    href_domain = self.dc.get_Domain_fromurl(href)
+
+                    domain_id = None 
+                    domain_key = self.dc.get_Domain_key(href)
+                    while domain_id is None:
+                        domain_id = self.drw.get_domain(domain_key)
+
+                    assert domain_id is not None
+                    href_domain = self._session.query(Domain).get(domain_id)
                 except ValueError as ex:
                     logging.error(ex)
                     logging.error("Skipping this link")
