@@ -35,7 +35,7 @@ from db import KeywordIncidence, SoftwareInvolvementRecord
 from db import CertainDate, AmbiguousDate, KeywordAdjacency
 from db import RelativeLink, AbsoluteLink
 
-KEYWORD_LIMIT = 1024
+KEYWORD_LIMIT = 32
 
 class KeywordSet(object):
 
