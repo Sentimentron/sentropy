@@ -237,11 +237,14 @@ class Keyword(Base):
 			raise ValueError(("Too long", word))
 
 		valid = True 
+		prev = None 
 		for pos, char in enumerate(word):
 			valid = char >= 'a' and char <='z'
 			valid = valid or (char >= 'A' and char <='Z')
 			valid = valid or (char >= '0' and char <='9')
 			valid = valid or (char == ' ')
+			valid = valid or (char == '.' and char != prev)
+			prev = char 
 			if not valid:
 				raise ValueError("Invalid character '%s' in '%s' at position %d" % (char, word, pos))
 
