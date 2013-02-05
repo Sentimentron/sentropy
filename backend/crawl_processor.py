@@ -107,7 +107,7 @@ class KeywordSet(object):
 
 class CrawlProcessor(object):
 
-    __VERSION__ = "CrawlProcessor-0.1"
+    __VERSION__ = "CrawlProcessor-0.2"
 
     def __init__(self, engine, stop_list="keyword_filter.txt"):
 
@@ -142,15 +142,19 @@ class CrawlProcessor(object):
         self.drw = DomainResolutionWorker()
 
     def process_record(self, item):
-        try:
-            if len(item) != 2:
-                raise ValueError(item)
-            self._process_record(item)
-        except Exception as ex:
-            import traceback
-            print >> sys.stderr, ex
-            traceback.print_exc()
-            raise ex 
+        if len(item) != 2:
+            raise ValueError(item)
+        ret, retries = None, 2
+        while ret == None and retries > 0:
+            try:
+                retries -= 1
+                ret = self._process_record(item)
+            except Exception as ex:
+                import traceback
+                print >> sys.stderr, ex
+                traceback.print_exc()
+                raise ex 
+
 
     def _process_record(self, item_arg):
 
@@ -265,6 +269,7 @@ class CrawlProcessor(object):
                 for i, j in zip(nnp_buf[0:-1], nnp_buf[1:]):
                     nnp_adj.add((i, j))
 
+        nnp_vector = filter(lambda x: x.lower() not in self.stop_list, nnp_vector)
         nnp_counter = Counter(nnp_vector)
         for word in nnp_set:
             score = nnp_counter[word]
@@ -278,6 +283,18 @@ class CrawlProcessor(object):
                     kset.add(item)
             except ValueError:
                 break 
+
+        scored_nnp_adj = []
+        for item1, item2 in nnp_adj:
+            score = nnp_counter[item1] + nnp_counter[item2]
+            scored_nnp_adj.append((item1, item2, score))
+
+        nnp_adj = []
+        for item1, item2, score in sorted(scored_nnp_adj, key=lambda x: x[1], reverse=True):
+            if len(nnp_adj) < KEYWORD_LIMIT:
+                nnp_adj.append((item1, item2))
+            else:
+                break
 
         # Generate list of all keywords
         keywords = set([])
@@ -432,7 +449,13 @@ class CrawlProcessor(object):
         article.status = status
 
         # Commit to database, return True on success
-        self._session.commit()
+        try:
+            self._session.commit()
+        except OperationalError as ex:
+            logging.error(ex)
+            self._session.rollback()
+            return None
+
         return True
 
     def finalize(self):

@@ -21,7 +21,9 @@ def worker_init():
     cp = CrawlProcessor(core.get_database_engine_string())
 
 def worker_process(record):
-    return cp.process_record(record)
+    ret = cp.process_record(record)
+    cp.finalize()
+    return ret
 
 if __name__ == "__main__":
     core.configure_logging()
@@ -44,7 +46,6 @@ if __name__ == "__main__":
     
     records = []
     r = CrawlFileController(c)
-
 
     if testing:
         for record in list(r.read_CrawlFileSQL('tmpSYh7nw', False)):
