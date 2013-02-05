@@ -54,15 +54,26 @@ if __name__ == "__main__":
             headers, content, url, date_crawled, content_type = record
             headers, content, url, content_type = [str(i) for i in [headers, content, url, content_type]]
             records.append((None, (headers, content, url, date_crawled, content_type)))
+        if multi:
+            results = p.map(worker_process, records, 16)
+        else:
+            results = map(worker_process, records)
+        print results
+        sys.exit(0)
     else: # This is broken
-        assert False == True
-        for i in q:
-            record = r.read_CrawlFile(i)
+        for crawl_file in q:
+            record, records = r.read_CrawlFile(crawl_file), []
             if record is None:
                 continue
             for rec in record:
-                records.append((i.crawl_id, rec))
-                break
+                headers, content, url, date_crawled, content_type = rec
+                headers, content, url, content_type = [str(i) for i in [headers, content, url, content_type]]
+                records.append((crawl_file.id, (headers, content, url, date_crawled, content_type)))
+
+            results = map(worker_process, records)
+            print results
+            r.set_completed(crawl_file)
+            break
     
 
     results = None 

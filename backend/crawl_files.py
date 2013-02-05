@@ -43,6 +43,10 @@ class CrawlFileController(object):
 		logging.info("Completed downloading %s...", which.key)
 		return fp
 
+	def mark_CrawlFile_complete(self, crawl):
+		crawl.status = "Complete"
+		self._controller.commit()
+
 	def decompress_CrawlFileSQL(self, fp):
 		_junk, fname = tempfile.mkstemp()
 		logging.info("Decompressing to %s...", fname)

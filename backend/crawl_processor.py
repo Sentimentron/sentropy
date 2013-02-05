@@ -122,7 +122,7 @@ class CrawlProcessor(object):
             logging.info("Using existing engine...")
             self._engine = engine
         logging.info("Binding session...")
-        self._session = Session(bind=self._engine, autocommit = False, autoflush = True)
+        self._session = Session(bind=self._engine, autocommit = False, autoflush = False)
 
         if type(stop_list) == types.StringType:
             stop_list_fp = open(stop_list)
