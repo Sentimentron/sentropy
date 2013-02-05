@@ -4,6 +4,9 @@ import logging
 import re
 import types
 
+from sqlalchemy.ext.compiler import compiles 
+from sqlalchemy.sql import expression
+
 from sqlalchemy import Table, Sequence, Float, Column, String, Integer, UniqueConstraint, ForeignKey, create_engine
 from sqlalchemy.orm.session import Session 
 from sqlalchemy.orm import validates, relationship
@@ -15,6 +18,15 @@ from datetime import datetime
 KEY_VAL = re.compile("^([a-z0-9]([-a-z0-9]*[a-z0-9])?\\.)+((a[cdefgilmnoqrstuwxz]|aero|arpa)|(b[abdefghijmnorstvwyz]|biz)|(c[acdfghiklmnorsuvxyz]|cat|com|coop)|d[ejkmoz]|(e[ceghrstu]|edu)|f[ijkmor]|(g[abdefghilmnpqrstuwy]|gov)|h[kmnrtu]|(i[delmnoqrst]|info|int)|(j[emop]|jobs)|k[eghimnprwyz]|l[abcikrstuvy]|(m[acdghklmnopqrstuvwxyz]|mil|mobi|museum)|(n[acefgilopruz]|name|net)|(om|org)|(p[aefghklmnrstwy]|pro)|qa|r[eouw]|s[abcdeghijklmnortvyz]|(t[cdfghjklmnoprtvwz]|travel)|u[agkmsyz]|v[aceginu]|w[fs]|y[etu]|z[amw])$")
 
 Base = declarative_base()
+
+# Prefix all INSERTs with INSERT IGNORE to help stop race conditions
+@compiles(expression.Insert) 
+def annotated_insert(insert, compiler, **kw): 
+	logging.debug("INSERT TABLE %s", insert.table)
+	if str(insert.table) == 'software':
+		logging.debug("INSERT TABLE (IGNORE) %s", insert.table)
+		insert = insert.prefix_with('IGNORE')
+	return compiler.visit_insert(insert, **kw)
 
 class DBBackedController(object):
 
@@ -92,6 +104,30 @@ class CrawlFile(Base):
 		self.status = status
 		self.date_loaded = date_loaded
 		self.date_update = date_updated
+
+class CrawlArticleResult(Base):
+
+	__tablename__ = 'crawl_file_results'
+
+	id 		= Column(Integer, ForeignKey("crawl_files.id"), primary_key = True)
+	success = Column(SmallInteger, nullable = False)
+	failure = Column(SmallInteger, nullable = False)
+	date    = Column(DateTime, nullable = False)
+
+	@validates('success', 'failure', 'id')
+	def validate_numeric_field(self, key, val):
+		if type(val) is not types.IntType:
+			raise TypeError("field '%s' should be an Integer (currently %s)", key, type(val))
+		if val < 0:
+			raise ValueError("field '%s' cannot be less than 0 (currently %d)", key, val)
+		return val
+
+	def __init__(self, parent_id, success, failure):
+
+		self.date = datetime.now()
+		self.success = success
+		self.failure = failure 
+		self.id = parent_id
 
 class CrawlController(DBBackedController):
 
@@ -267,7 +303,19 @@ class KeywordController(DBBackedController):
 		super(KeywordController, self).__init__(engine, session)
 
 	def get_Keyword_fromId(self, id):
-		return self._session.query(Keyword).get(id)		
+		return self._session.query(Keyword).get(id)
+
+	def batch_resolve_Keywords(self, keywords):
+		def chunks(l, n):
+			for i in xrange(0, len(l), n): 
+				yield l[i:i+n]
+
+		chunks = chunks(keywords, 16)
+		in_database = set([])
+		to_create   = set([])
+
+		for chunk in chunks:
+			it = self._session.query(Keyword).filter(key.in_(chunk))
 
 	def get_Keyword(self, term):
 		it = self._session.query(Keyword).filter_by(word = term)
@@ -475,8 +523,10 @@ class AbsoluteLink(Base):
 		if len(path) > 1024:
 			raise ValueError(("Path is too long", path))
 
-		if "http://" in path or "://" in path:
-			raise ValueError(("AbsoluteLinks should not contain a prefix", path))
+		if len(path) > 7:
+			if "http://" in path[:7] or "://" in path[:7]:
+				raise ValueError(("AbsoluteLinks should not contain a prefix", path))
+
 		return path
 
 	def __str__(self):
@@ -581,7 +631,7 @@ class Article(Base):
 	inserted= Column(DateTime, nullable = False)
 	crawl_id= Column(Integer, ForeignKey("crawl_files.id"), nullable = True)
 	domain_id = Column(Integer, ForeignKey("domains.id"), nullable = False)
-	status  = Column(Enum("Processed", "NoDates", "NoContent", "UnsupportedType", "ClassificationError", "OtherError"), nullable = False)
+	status  = Column(Enum("Processed", "NoDates", "NoContent", "UnsupportedType", "ClassificationError", "LanguageError", "OtherError"), nullable = False)
 
 	documents = relationship("Document", backref="parent")
 
@@ -729,7 +779,7 @@ class DomainController(DBBackedController):
 
 		return it
 
-	def get_Domain_fromurl(self, url):
+	def get_Domain_key(self, url):
 		orig = url
 		if "http://" in url:
 			url = url[7:]
@@ -739,6 +789,10 @@ class DomainController(DBBackedController):
 				break
 
 		key = url[:pos]
+		return key
+
+	def get_Domain_fromurl(self, url):
+		key = self.get_Domain_key(url)
 
 		# Search the database
 		d = self.get_Domain(key)

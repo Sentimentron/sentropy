@@ -4,12 +4,14 @@
 import itertools
 import logging
 import os
+import sys
 import threading
 import types
 
 from collections import Counter
 
 from sqlalchemy import create_engine
+from sqlalchemy.exc import *
 from sqlalchemy.orm.session import Session 
 from topia.termextract import extract
 from nltk.tokenize import sent_tokenize
@@ -22,6 +24,8 @@ import langid
 import pydate
 import pysen
 import pysen.models
+import MySQLdb as mdb
+
 
 from db import Article, Domain, DomainController, ArticleController
 from db import Keyword, KeywordController
@@ -72,7 +76,10 @@ class KeywordSet(object):
                 i, j = i.strip(), j.strip()
                 i = kwc.get_Keyword_fromId(keyword_map[i])
                 j = kwc.get_Keyword_fromId(keyword_map[j])
-                ret.append((i,j))
+                if i is not None and j is not None:
+                    ret.append((i,j))
+                else:
+                    logging.error("Couldn't resolve keyword pair.")
             except ValueError as ex:
                 logging.error(ex)
             except KeyError as ex:
@@ -87,7 +94,10 @@ class KeywordSet(object):
             try:
                 ident = keyword_map[t]
                 k = kwc.get_Keyword_fromId(ident)
-                ret.append(k)
+                if k is not None:
+                    ret.append(k)
+                    continue
+                logging.error("Can't resolve keyword %s with iden %d", t, ident)
             except ValueError as ex:
                 logging.error(ex)
             except KeyError as ex:
@@ -103,7 +113,7 @@ class CrawlProcessor(object):
 
         if type(engine) == types.StringType:
             logging.info("Using connection string '%s'" % (engine,))
-            new_engine = create_engine(engine, encoding='utf-8')
+            new_engine = create_engine(engine, encoding='utf-8', isolation_level="READ COMMITTED")
             if "sqlite:" in engine:
                 logging.debug("Setting text factory for unicode compat.")
                 new_engine.raw_connection().connection.text_factory = str 
@@ -112,7 +122,7 @@ class CrawlProcessor(object):
             logging.info("Using existing engine...")
             self._engine = engine
         logging.info("Binding session...")
-        self._session = Session(bind=self._engine, autocommit = False)
+        self._session = Session(bind=self._engine, autocommit = False, autoflush = True)
 
         if type(stop_list) == types.StringType:
             stop_list_fp = open(stop_list)
@@ -129,12 +139,24 @@ class CrawlProcessor(object):
         self.ex  = extract.TermExtractor()
         self.kwc = KeywordController(self._engine, self._session)
         self.swc = SoftwareVersionsController(self._engine, self._session)
+        self.drw = DomainResolutionWorker()
 
     def process_record(self, item):
+        try:
+            if len(item) != 2:
+                raise ValueError(item)
+            self._process_record(item)
+        except Exception as ex:
+            import traceback
+            print >> sys.stderr, ex
+            traceback.print_exc()
+            raise ex 
 
-        crawl_id, record = item
+    def _process_record(self, item_arg):
 
-        headers, content, url, date_crawled, content_type = [str(i) for i in record]
+        crawl_id, record = item_arg
+        headers, content, url, date_crawled, content_type = record
+
         assert headers is not None
         assert content is not None 
         assert url is not None 
@@ -142,10 +164,18 @@ class CrawlProcessor(object):
         assert content_type is not None 
 
         status = "Processed"
+
+        # Sort out the domain
+        domain_identifier = None 
+        logging.info("Retrieving domain...")
+        domain_key = self.dc.get_Domain_key(url)
+        while domain_identifier == None:
+            domain_identifier = self.drw.get_domain(domain_key)
+
+        domain = self._session.query(Domain).get(domain_identifier)
+        assert domain is not None
+
         # Build database objects 
-        self._session.begin(subtransactions=True)
-        domain = self.dc.get_Domain_fromurl(url)
-        self._session.commit()
         path   = self.ac.get_path_fromurl(url)
         article = Article(path, date_crawled, crawl_id, domain, status)
         classified_by = self.swc.get_SoftwareVersion_fromstr(pysen.__VERSION__)
@@ -156,7 +186,6 @@ class CrawlProcessor(object):
             article.status = "UnsupportedType"
             return False
 
-        logging.debug(url)
         # Start the async transaction to get the plain text
         worker_req_thread = BoilerPipeWorker(content)
         worker_req_thread.start()
@@ -186,9 +215,8 @@ class CrawlProcessor(object):
         # If the language isn't English, skip it
         if lang != "en":
             logging.info("language: %s with certainty %.2f - skipping...", lang, lang_certainty)
-            article.status = "NoContent" # Replace with something appropriate
+            article.status = "LanguageError" # Replace with something appropriate
             return False
-
 
         content = worker_req_thread.result.encode('ascii', 'ignore')
 
@@ -396,7 +424,8 @@ class CrawlProcessor(object):
         clas_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(pysen.__VERSION__), "Classified", doc)
         extr_sir = SoftwareInvolvementRecord(self.swc.get_SoftwareVersion_fromstr(worker_req_thread.version), "Extracted", doc)
 
-        self._session.add_all([self_sir, date_sir, clas_sir, extr_sir])
+        for sw in [self_sir, date_sir, clas_sir, extr_sir]:
+            self._session.merge(sw, load=True)
 
         logging.debug("Domain: %s", domain)
         logging.debug("Path: %s", path)
@@ -409,6 +438,38 @@ class CrawlProcessor(object):
     def finalize(self):
         self._session.commit()
 
+class DomainResolutionWorker(object):
+
+    def __init__(self):
+        import MySQLdb as mdb
+        logging.info("Domain resolution: opening DB...")
+        host = os.environ["SENT_DB_URL"]
+        user = os.environ["SENT_DB_USER"]
+        pswd = os.environ["SENT_DB_PASS"]
+        self.con = mdb.connect(host, user, pswd, "sentimentron")
+
+    def get_domain(self, domain):
+
+        cur = self.con.cursor()
+
+        # Check if the domain exists
+        logging.info("DomainResolutionWorker: checking %s..." % domain)
+        sql = "SELECT id FROM domains WHERE `key` = %s"
+        cur.execute(sql,(domain,))
+        for row, in cur:
+            logging.info((domain, row))
+            return row 
+
+        # If it doesn't, create it
+        sql = "INSERT IGNORE INTO domains (`key`,`date`) VALUES (%s, NOW())"
+        logging.debug(sql, domain)
+        logging.info("DomainResolutionWorker: inserting %s..." % domain)
+        try:
+            cur.execute(sql,(domain,))
+            self.con.commit()
+        except mdb.OperationalError as ex:
+            return None 
+
 class KeywordResolutionWorker(threading.Thread):
 
     def __init__(self, keywords):
@@ -418,7 +479,6 @@ class KeywordResolutionWorker(threading.Thread):
 
 
     def run(self):
-        import MySQLdb as mdb
         # Open the mysqldatabase connection
         logging.info("Keyword resolution: opening DB...")
         host = os.environ["SENT_DB_URL"]
@@ -443,9 +503,6 @@ class KeywordResolutionWorker(threading.Thread):
             thing = (key, identifier)
             logging.debug(thing)
             self.out_keywords[key] = identifier
-
-
-
 
 class BoilerPipeWorker(threading.Thread):
 
