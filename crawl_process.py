@@ -72,9 +72,7 @@ if __name__ == "__main__":
 
             results = map(worker_process, records)
             print results
-            r.mark_CrawlFile_complete(crawl_file)
-            break
-    
+            r.mark_CrawlFile_complete(crawl_file) 
 
     results = None 
     if multi:
