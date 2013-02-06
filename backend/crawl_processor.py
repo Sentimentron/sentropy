@@ -122,7 +122,7 @@ class CrawlProcessor(object):
             logging.info("Using existing engine...")
             self._engine = engine
         logging.info("Binding session...")
-        self._session = Session(bind=self._engine, autocommit = False, autoflush = False)
+        self._session = Session(bind=self._engine, autocommit = False)
 
         if type(stop_list) == types.StringType:
             stop_list_fp = open(stop_list)
@@ -154,6 +154,7 @@ class CrawlProcessor(object):
                 print >> sys.stderr, ex
                 traceback.print_exc()
                 raise ex 
+	return ret
 
 
     def _process_record(self, item_arg):
@@ -182,6 +183,7 @@ class CrawlProcessor(object):
         # Build database objects 
         path   = self.ac.get_path_fromurl(url)
         article = Article(path, date_crawled, crawl_id, domain, status)
+	self._session.add(article)
         classified_by = self.swc.get_SoftwareVersion_fromstr(pysen.__VERSION__)
         assert classified_by is not None
 

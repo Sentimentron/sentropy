@@ -45,6 +45,7 @@ class CrawlFileController(object):
 
 	def mark_CrawlFile_complete(self, crawl):
 		crawl.status = "Complete"
+		self._controller._session.merge(crawl)
 		self._controller.commit()
 
 	def decompress_CrawlFileSQL(self, fp):

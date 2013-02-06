@@ -60,7 +60,7 @@ class CrawlQueue(object):
 		if type(what) == CrawlFile:
 			what = what.id 
 
-		if type(what) is not types.IntType:
+		if type(what) is not types.IntType or type(what) is not types.LongType:
 			raise TypeError(type(what))
 
 		logging.info("Marking %d as completed...", what)
