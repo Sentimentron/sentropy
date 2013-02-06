@@ -74,7 +74,6 @@ if __name__ == "__main__":
             print results
             r.mark_CrawlFile_complete(crawl_file)
             q.set_completed(crawl_file)
-    
 
     results = None 
     if multi:
