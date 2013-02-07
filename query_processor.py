@@ -83,7 +83,7 @@ class Query(object):
         self.resolved_keywords = keywords
 
     def gen_keyword_pairs(self):
-        return itertools.permutations(self.keywords, 2)
+        return itertools.combinations(self.keywords, 2)
 
     def resolve_keyword_adjacencies(self):
         session = self._session
@@ -91,10 +91,10 @@ class Query(object):
         adj = set([])
         ret = set([])
 
-        for key in self.keywords:
-            sql = ("""SELECT doc_id, key1_id, key2_id, word1, keywords.word as word2 FROM (
+        for key1, key2 in self.gen_keyword_pairs():
+            sql = ("""SELECT doc_id, word1, word2 FROM (SELECT doc_id, key1_id, key2_id, word1, keywords.word AS word2 FROM (
                 SELECT doc_id, key1_id, key2_id, word AS word1 FROM keyword_adjacencies JOIN keywords on key1_id = keywords.id
-                ) k JOIN keywords ON k.key2_id = keywords.id WHERE word1 LIKE '%s'""" % (key,))
+                ) k JOIN keywords ON k.key2_id = keywords.id) sea WHERE word1 LIKE '%s' AND `word2` LIKE '%s'""" % (key1, key2))
             logging.debug(sql)
             result = conn.execute(sql)
             for row in result:
