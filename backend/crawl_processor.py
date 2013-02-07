@@ -200,6 +200,10 @@ class CrawlProcessor(object):
         logging.info("Parsing HTML...")
         html = BeautifulSoup(content)
 
+        if html is None:
+            article.status = "NoContent"
+            return False
+
         # Extract the dates 
         date_dict = pydate.get_dates(html)
 
