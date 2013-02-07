@@ -9,6 +9,7 @@ import threading
 import types
 
 from collections import Counter
+import sqlalchemy.orm.exc
 
 from sqlalchemy import create_engine
 from sqlalchemy.exc import *
@@ -141,9 +142,34 @@ class CrawlProcessor(object):
         self.swc = SoftwareVersionsController(self._engine, self._session)
         self.drw = DomainResolutionWorker()
 
+    def _check_processed(self, item):
+        crawl_id, record = item 
+        headers, content, url, date_crawled, content_type = record
+
+        path   = self.ac.get_path_fromurl(url)
+        domain_identifier = None 
+        logging.info("_check_processed: retrieving domain...")
+        domain_key = self.dc.get_Domain_key(url)
+        while domain_identifier == None:
+            domain_identifier = self.drw.get_domain(domain_key)
+
+        it = self._session.query(Article).filter_by(crawl_id = crawl_id).filter_by(domain_id = domain_identifier).filter_by(path = path)
+        try:
+            it = it.one()
+            logging.error("%s: already processed", url)
+            return False 
+        except sqlalchemy.orm.exc.MultipleResultsFound:
+            logging.error("%s: appears to have been already processed multiple times", url)
+            return False 
+        except sqlalchemy.orm.exc.NoResultFound:
+            logging.info("%s: hasn't been processed yet", url)
+            return True 
+
     def process_record(self, item):
         if len(item) != 2:
             raise ValueError(item)
+        if not self._check_processed(item):
+            return False
         ret, retries = None, 2
         while ret == None and retries > 0:
             try:
