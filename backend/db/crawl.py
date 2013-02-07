@@ -402,11 +402,12 @@ class CertainDate(Base):
 	id 		= Column(Integer, Sequence('certain_date_id_seq'), primary_key = True)
 	date 	= Column(DateTime, nullable = False)
 	doc_id 	= Column(Integer, ForeignKey("documents.id"), nullable = False)
-	position = Column(SmallInteger, nullable = False, default = 1)
+	position = Column(SmallInteger, nullable = False)
 
 	@validates('position')
 	def val_position(self, key, value):
 		assert value > 0
+		return value
 
 	def __init__(self, date, document, position):
 
@@ -429,7 +430,7 @@ class AmbiguousDate(Base):
 	doc_id 	= Column(Integer, ForeignKey("documents.id"), nullable = False)
 	interpreted_with 	= Column(Enum("DayFirstYearFirst", "DayFirstYearSecond", "DaySecondYearFirst", "DaySecondYearSecond"), nullable = False)
 	matched_text 		= Column(String(MAX_FRAG_LEN), nullable = False)
-	position = Column(SmallInteger, nullable = False, default = 1)
+	position = Column(SmallInteger, nullable = False)
 
 	@validates('matched_text')
 	def validate_text(self, key, value):
@@ -443,6 +444,7 @@ class AmbiguousDate(Base):
 	@validates('position')
 	def val_position(self, key, value):
 		assert value > 0
+		return value
 
 	def __init__(self, date, document, day_first, year_first, text, position):
 

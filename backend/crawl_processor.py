@@ -209,7 +209,7 @@ class CrawlProcessor(object):
         # Build database objects 
         path   = self.ac.get_path_fromurl(url)
         article = Article(path, date_crawled, crawl_id, domain, status)
-	self._session.add(article)
+        self._session.add(article)
         classified_by = self.swc.get_SoftwareVersion_fromstr(pysen.__VERSION__)
         assert classified_by is not None
 
@@ -353,7 +353,6 @@ class CrawlProcessor(object):
         keyword_resolution_worker = KeywordResolutionWorker([k.word for k in keywords])
         keyword_resolution_worker.start()
             
-
         # Run sentiment analysis
         trace = []
         features = self.cls.classify(worker_req_thread.result, trace) 
