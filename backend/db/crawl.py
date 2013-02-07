@@ -640,8 +640,9 @@ class Article(Base):
 
 	@validates('path')
 	def validate_path(self, key, value):
-		if "http://" in value:
-			raise ValueError("path: shouldn't be a URL: %s", (value,))
+		if len(value) > 7:
+			if "http://" == value[0:7]:
+				raise ValueError("path: shouldn't be a URL: %s", (value,))
 
 		for pos, char in enumerate(value):
 			if char == '/':
