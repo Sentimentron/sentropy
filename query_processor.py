@@ -65,7 +65,7 @@ class Query(object):
             like_str = '%%%s' % (domain,)
             it = session.query(Domain).filter(key.like(like_str))
             if it.count() == 0:
-                uresolved_domains.add(domain)
+                unresolved_domains.add(domain)
                 continue
             for d in it:
                 domain_objs.append(d)
@@ -77,7 +77,7 @@ class Query(object):
         for keyword in self.keywords:
             it = set(session.query(Keyword).filter(Keyword.word.like(keyword)).all())
             if len(it) == 0:
-                self.uresolved_keywords.add(keyword)
+                self.unresolved_keywords.add(keyword)
                 continue
             keywords.append(it)
         self.resolved_keywords = keywords
@@ -112,10 +112,15 @@ class Query(object):
     def resolve_keyword_incidences(self):
         pass
 
-if __name__ == "__main__":
-
-    core.configure_logging()
-    q = Query(Query.get_keywords("Apple Store"), [], core.get_database_engine_string())
+def test_query(query):
+    q = Query(Query.get_keywords(query), [], core.get_database_engine_string())
     q.resolve_keywords()
     q.resolve_keyword_adjacencies()
     raw_input(q.keyword_adjacencies_docs)
+
+if __name__ == "__main__":
+
+    core.configure_logging()
+    
+    test_query("President Barack Obama")
+    test_query("Steve Jobs")
