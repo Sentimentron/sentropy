@@ -402,14 +402,20 @@ class CertainDate(Base):
 	id 		= Column(Integer, Sequence('certain_date_id_seq'), primary_key = True)
 	date 	= Column(DateTime, nullable = False)
 	doc_id 	= Column(Integer, ForeignKey("documents.id"), nullable = False)
+	position = Column(SmallInteger, nullable = False, default = 1)
 
-	def __init__(self, date, document):
+	@validates('position')
+	def val_position(self, key, value):
+		assert value > 0
+
+	def __init__(self, date, document, position):
 
 		if not isinstance(document, Document):
 			raise TypeError(("document: Not a Document", document, type(document)))
 
 		self.date = date 
 		self.document = document 
+		self.position = position
 
 
 class AmbiguousDate(Base):
@@ -423,6 +429,7 @@ class AmbiguousDate(Base):
 	doc_id 	= Column(Integer, ForeignKey("documents.id"), nullable = False)
 	interpreted_with 	= Column(Enum("DayFirstYearFirst", "DayFirstYearSecond", "DaySecondYearFirst", "DaySecondYearSecond"), nullable = False)
 	matched_text 		= Column(String(MAX_FRAG_LEN), nullable = False)
+	position = Column(SmallInteger, nullable = False, default = 1)
 
 	@validates('matched_text')
 	def validate_text(self, key, value):
@@ -433,7 +440,11 @@ class AmbiguousDate(Base):
 			raise ValueError(("Too long", value))
 		raise ValueError(("Too short", value))
 
-	def __init__(self, date, document, day_first, year_first, text):
+	@validates('position')
+	def val_position(self, key, value):
+		assert value > 0
+
+	def __init__(self, date, document, day_first, year_first, text, position):
 
 		if not isinstance(document, Document):
 			raise TypeError(("document: Not a Document", document, type(document)))
@@ -452,6 +463,7 @@ class AmbiguousDate(Base):
 		self.date = date 
 		self.matched_text = text
 		self.document = document
+		self.position  = position
 
 
 class KeywordAdjacency(Base):

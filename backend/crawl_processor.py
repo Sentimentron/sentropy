@@ -417,13 +417,20 @@ class CrawlProcessor(object):
                 logging.error("OK: 'dates' is not in a pydate result record.")
                 continue
             dlen = len(rec["dates"])
+            if rec["text"] not in content:
+                logging.debug("'%s' is not in %s", rec["text"], content)
+                continue
             if dlen > 1:
                 for date, day_first, year_first in rec["dates"]:
-                    dobj = AmbiguousDate(date, doc, day_first, year_first, rec["prep"])
+                    try:
+                        dobj = AmbiguousDate(date, doc, day_first, year_first, rec["prep"], key)
+                    except ValueError as ex:
+                        logging.error(ex)
+                        continue
                     self._session.add(dobj)
             elif dlen == 1:
                 for date, day_first, year_first in rec["dates"]:
-                    dobj = CertainDate(date, doc)
+                    dobj = CertainDate(date, doc, key)
                     self._session.add(dobj)
             else:
                 logging.error("'dates' in a pydate result set contains no records.")
