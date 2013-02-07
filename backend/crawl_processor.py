@@ -226,7 +226,7 @@ class CrawlProcessor(object):
         logging.info("Parsing HTML...")
         html = BeautifulSoup(content)
 
-        if html is None:
+        if html is None or html.body is None:
             article.status = "NoContent"
             return False
 
