@@ -37,4 +37,4 @@ def configure_logging():
 		level = os.environ["SENT_PRODUCTION_LOG_LEVEL"]
 		log_level = LOG_LEVELS[level]
 
-	logging.basicConfig(level=log_level, format="%(filename)s:%(lineno)d: %(funcName)s, %(message)s")
+	logging.basicConfig(level=log_level, format="%(asctime)-15s:%(filename)s:%(lineno)d: %(funcName)s, %(message)s")
