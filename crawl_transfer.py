@@ -30,6 +30,8 @@ def main():
             
     for crawl_file in q:
         records = r.read_CrawlFile(crawl_file)
+        if records is None:
+            continue
         for record in records:
             headers, content, url, date_crawled, content_type = record 
             headers, content, url = [str(i) for i in [headers, content, url]]
