@@ -15,12 +15,13 @@ import core
 
 def main():
 
+    core.configure_logging()
+
     c = CrawlController(core.get_database_engine_string())
     q = CrawlQueue(c)
     r = CrawlFileController(c)
     p = ProcessQueue()
 
-    core.configure_logging()
     engine = core.get_database_engine_string()
     logging.info("Using connection string '%s'" % (engine,))
     engine = create_engine(engine, encoding='utf-8', isolation_level="READ COMMITTED")
