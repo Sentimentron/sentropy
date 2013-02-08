@@ -45,7 +45,7 @@ def main():
 
         status = cp.process_record((article.crawl_id, (article.headers, article.content, article.url, \
             article.date_crawled, article.content_type)))
-        if status is None 
+        if status is None:
             article.status = "Error"
         else:
             article.status = "Processed"
