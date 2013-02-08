@@ -11,7 +11,7 @@ from sqlalchemy import Table, Sequence, Float, Column, String, Integer, UniqueCo
 from sqlalchemy.orm.session import Session 
 from sqlalchemy.orm import validates, relationship
 from sqlalchemy.ext.declarative import declarative_base 
-from sqlalchemy.types import Enum, DateTime, SmallInteger
+from sqlalchemy.types import Enum, DateTime, SmallInteger, UnicodeText, Text
 from sqlalchemy.orm.exc import *
 from datetime import datetime
 
@@ -27,6 +27,22 @@ def annotated_insert(insert, compiler, **kw):
 		logging.debug("INSERT TABLE (IGNORE) %s", insert.table)
 		insert = insert.prefix_with('IGNORE')
 	return compiler.visit_insert(insert, **kw)
+
+class RawArticle(Base):
+
+	id 			= Column(Integer, Sequence('rawarticle_id_seq'), primary_key = True)
+	crawl_id 	= Column(Integer, ForeignKey('crawl_files.id'), nullable = False)
+	status      = Column(Enum("Processed", "Unprocessed", "Error"), nullable = False, default="Unprocessed")
+	headers 	= Column(UnicodeText, nullable = False, default = '')
+	content 	= Column(UnicodeText, nullable = False, default = '')
+	date_crawled= Column(DateTime, nullable = False)
+	url 		= Column(Text, nullable = False)
+	content_type= Column(Text, nullable = False)
+
+	def __init__(self, item):
+		self.crawl_id, record = item 
+		self.headers, self.content, self.url, self.date_crawled, self.content_type = record
+
 
 class DBBackedController(object):
 
