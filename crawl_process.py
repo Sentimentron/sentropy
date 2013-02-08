@@ -10,89 +10,48 @@ import sys
 import core
 import requests
 
-from backend import CrawlQueue, CrawlFileController, CrawlProcessor
-from backend.db import CrawlController, SoftwareVersionsController, SoftwareVersion
+from sqlalchemy import create_engine
+from sqlalchemy.exc import *
+from sqlalchemy.orm.session import Session 
+from sqlalchemy.orm.exc import *
 
-from backend import pysen, pydate
-from lxml import etree
+from backend import CrawlQueue, CrawlFileController, CrawlProcessor, ProcessQueue
+from backend.db import SoftwareVersionsController, SoftwareVersion, RawArticle
 
-def worker_init():
-    global cp
-    cp = CrawlProcessor(core.get_database_engine_string())
 
-def worker_process(record):
-    ret = cp.process_record(record)
-    cp.finalize()
-    return ret
-
-if __name__ == "__main__":
+def main():
     core.configure_logging()
 
-    testing = "--testing" in sys.argv
     multi   = "--multi" in sys.argv
 
-    c = CrawlController(core.get_database_engine_string())
-    q = CrawlQueue(c)
-    p = None
-    sw = SoftwareVersionsController(core.get_database_engine_string())
+    engine = core.get_database_engine_string()
+    logging.info("Using connection string '%s'" % (engine,))
+    engine = create_engine(engine, encoding='utf-8', isolation_level="READ COMMITTED")
+    logging.info("Binding session...")
+    session = Session(bind=engine, autocommit = False)
 
-    if multi:
-        count = multiprocessing.cpu_count()*1.75
-        count = int(count)
-        logging.info("Running over %d processes...", count)
-        p = multiprocessing.Pool(count, worker_init)
-    else:
-        worker_init()
-    
-    records = []
-    r = CrawlFileController(c)
+    p  = ProcessQueue()
+    cp = CrawlProcessor(engine)
+    sw = SoftwareVersionsController(engine)
 
-    if testing:
-        for record in list(r.read_CrawlFileSQL('tmpSYh7nw', False)):
-            if len(record) != 5:
-                raise ValueError(record)
-            headers, content, url, date_crawled, content_type = record
-            headers, content, url, content_type = [str(i) for i in [headers, content, url, content_type]]
-            records.append((None, (headers, content, url, date_crawled, content_type)))
-        if multi:
-            results = p.map(worker_process, records, 16)
+    for article_id in p: 
+        article = session.query(RawArticle).get(article_id)
+        if article is None:
+            logging.error("%d doesn't exist!")
+            continue 
+
+        if article.status != "Unprocessed":
+            logging.error("%d@%s: status %s", article_id, article.url, article.status)
+
+        if not cp.process_record((article.crawl_id, (article.headers, article.content, article.url, \
+            article.date_crawled, article.content_type))):
+            article.status = "Error"
         else:
-            results = map(worker_process, records)
-        print results
-        sys.exit(0)
-    else: # This is broken
-        for crawl_file in q:
-            record, records = r.read_CrawlFile(crawl_file), []
-            if record is None:
-                continue
-            for rec in record:
-                headers, content, url, date_crawled, content_type = rec
-                headers, content, url, content_type = [str(i) for i in [headers, content, url, content_type]]
-                records.append((crawl_file.id, (headers, content, url, date_crawled, content_type)))
+            article.status = "Processed"
 
-            results = map(worker_process, records)
-            print results
-            r.mark_CrawlFile_complete(crawl_file)
-            q.set_completed(crawl_file)
+        logging.info("%d: status changed to %s", article.id, article.status)
+        session.commit()
+        p.set_completed(article_id)
 
-    results = None 
-    if multi:
-        results = p.map(worker_process, records, 16)
-    else:
-        results = map(worker_process, records)
-    print results
-    sys.exit(0)
-
-    logging.debug("Creating CrawlProcessor...")
-    cp = CrawlProcessor(core.get_database_engine_string())
-    
-    logging.debug("Processing crawl records...")
-    success = [cp.process_record(record) for record in records]
-    
-    logging.debug("Comitting crawl records...")
-    cp.finalize()
-
-    #worker_init()
-    #print map(worker_process, records)
-    #worker_pool = multiprocessing.Pool(None, worker_init)
-    #print worker_pool.map(worker_process, records)
+if __name__ == "__main__":
+    main()

@@ -37,18 +37,14 @@ class ProcessQueue(object):
 
 		while 1:
 			if not self._get_queueItemAvailabilityStatus():
-				if not self._replenish_queue():
-					break
+				break
 
 			rs = self._queue.get_messages()
 			logging.info("Currently %d items in the queue", len(rs))
 			for item in rs:
 				iden = int(item.get_body())
 				self._messages[iden] = item
-				y = self._controller.get_CrawlFile_fromid(iden)
-				if y.status != "Incomplete":
-					continue
-				yield y
+				yield int(iden)
 
 	def add_id(self, identifier):
 		identifier = str(identifier)
