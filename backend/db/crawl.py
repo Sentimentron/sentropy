@@ -40,6 +40,7 @@ class RawArticle(Base):
 	date_crawled= Column(DateTime, nullable = False)
 	url 		= Column(Text, nullable = False)
 	content_type= Column(Text, nullable = False)
+	inserted_id = Column(Integer, ForeignKey("articles.id"), nullable = True)
 
 	def __init__(self, item):
 		self.crawl_id, record = item 

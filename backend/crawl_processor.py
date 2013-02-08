@@ -180,7 +180,9 @@ class CrawlProcessor(object):
                 print >> sys.stderr, ex
                 traceback.print_exc()
                 raise ex 
-	return ret
+        if ret == False:
+            return None 
+
 
 
     def _process_record(self, item_arg):
@@ -501,7 +503,7 @@ class CrawlProcessor(object):
             self._session.rollback()
             return None
 
-        return True
+        return article.id
 
     def finalize(self):
         self._session.commit()

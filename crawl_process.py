@@ -43,11 +43,13 @@ def main():
         if article.status != "Unprocessed":
             logging.error("%d@%s: status %s", article_id, article.url, article.status)
 
-        if not cp.process_record((article.crawl_id, (article.headers, article.content, article.url, \
-            article.date_crawled, article.content_type))):
+        status = cp.process_record((article.crawl_id, (article.headers, article.content, article.url, \
+            article.date_crawled, article.content_type)))
+        if status is None 
             article.status = "Error"
         else:
             article.status = "Processed"
+            article.inserted_id = status
 
         logging.info("%d: status changed to %s", article.id, article.status)
         session.commit()
