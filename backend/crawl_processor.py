@@ -182,7 +182,7 @@ class CrawlProcessor(object):
                 raise ex 
         if ret == False:
             return None 
-
+        return ret 
 
 
     def _process_record(self, item_arg):
