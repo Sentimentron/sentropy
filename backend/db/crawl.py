@@ -30,11 +30,13 @@ def annotated_insert(insert, compiler, **kw):
 
 class RawArticle(Base):
 
+	__tablename__ = 'raw_articles'
+
 	id 			= Column(Integer, Sequence('rawarticle_id_seq'), primary_key = True)
 	crawl_id 	= Column(Integer, ForeignKey('crawl_files.id'), nullable = False)
 	status      = Column(Enum("Processed", "Unprocessed", "Error"), nullable = False, default="Unprocessed")
-	headers 	= Column(UnicodeText, nullable = False, default = '')
-	content 	= Column(UnicodeText, nullable = False, default = '')
+	headers 	= Column(Text, nullable = False, default = '')
+	content 	= Column(Text, nullable = False, default = '')
 	date_crawled= Column(DateTime, nullable = False)
 	url 		= Column(Text, nullable = False)
 	content_type= Column(Text, nullable = False)

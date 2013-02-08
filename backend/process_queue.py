@@ -16,16 +16,11 @@ SQS_REGION = "us-east-1"
 
 class ProcessQueue(object):
 
-	def __init__(self, controller, queue_name=None):
+	def __init__(self):
 
-		if not isinstance(controller, CrawlController):
-			raise TypeError(type(controller))
-
-		self._controller = controller
 		self._messages   = {}
 
-		if queue_name is None:
-			queue_name = DEFAULT_QUEUE_NAME
+		queue_name = DEFAULT_QUEUE_NAME
 		self._queue_name = queue_name
 
 		logging.info("Using '%s' as the queue.", (queue_name,))
@@ -54,6 +49,14 @@ class ProcessQueue(object):
 				if y.status != "Incomplete":
 					continue
 				yield y
+
+	def add_id(self, identifier):
+		identifier = str(identifier)
+		m = Message()
+		m.set_body(identifier)
+		success = self._queue.write(m)
+		if not success:
+			logging.error("Failed to enqueue %s", (item,))
 
 	def set_completed(self, what):
 		if type(what) == CrawlFile:
