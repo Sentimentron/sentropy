@@ -9,8 +9,8 @@ from sqlalchemy.exc import *
 from sqlalchemy.orm.session import Session 
 from sqlalchemy.orm.exc import *
 
-from backend import CrawlQueue, CrawlFileController, CrawlProcessor
-from backend.db import RawArticle, CrawlController, ProcessQueue
+from backend import CrawlQueue, CrawlFileController, CrawlProcessor, ProcessQueue
+from backend.db import RawArticle, CrawlController
 import core
 
 def main():
