@@ -11,7 +11,7 @@ from sqlalchemy import Table, Sequence, Float, Column, String, Integer, UniqueCo
 from sqlalchemy.orm.session import Session 
 from sqlalchemy.orm import validates, relationship
 from sqlalchemy.ext.declarative import declarative_base 
-from sqlalchemy.types import Enum, DateTime, SmallInteger, UnicodeText, Text
+from sqlalchemy.types import Enum, DateTime, SmallInteger, UnicodeText, Text, LargeBinary
 from sqlalchemy.orm.exc import *
 from datetime import datetime
 
@@ -36,7 +36,7 @@ class RawArticle(Base):
 	crawl_id 	= Column(Integer, ForeignKey('crawl_files.id'), nullable = False)
 	status      = Column(Enum("Processed", "Unprocessed", "Error"), nullable = False, default="Unprocessed")
 	headers 	= Column(Text, nullable = False, default = '')
-	content 	= Column(Text, nullable = False, default = '')
+	content 	= Column(LargeBinary, nullable = False, default = '')
 	date_crawled= Column(DateTime, nullable = False)
 	url 		= Column(Text, nullable = False)
 	content_type= Column(Text, nullable = False)
