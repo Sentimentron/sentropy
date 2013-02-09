@@ -35,25 +35,25 @@ class UserQuery(Base):
 	id 			= Column(Integer, Sequence('query_id_seq'), primary_key = True)
 	text 		= Column(String(255), unique = True, nullable = False)
 
-    @classmethod
-    def get_keywords(cls, q):
-        chunks = q.split(' ')
-        ret = []
-        for c in chunks:
-            valid = False
-            for l in c:
-                valid = valid or (l >= 'a' and l <= 'z')
-                valid = valid or (l >= 'A' and l <= 'Z')
-                valid = valid or (l >= '0' and l <= '9')
-            if not valid:
-                continue
-            ret.append(c)
-        return ret 
+	@classmethod
+	def get_keywords(cls, q):
+		chunks = q.split(' ')
+		ret = []
+		for c in chunks:
+			valid = False
+			for l in c:
+				valid = valid or (l >= 'a' and l <= 'z')
+				valid = valid or (l >= 'A' and l <= 'Z')
+				valid = valid or (l >= '0' and l <= '9')
+			if not valid:
+				continue
+			ret.append(c)
+		return ret 
 
-    @classmethod
-    def get_domains(cls, q):
-        chunks = q.split(' ')
-        return filter(lambda x: '.' in x, chunks)
+	@classmethod
+	def get_domains(cls, q):
+		chunks = q.split(' ')
+		return filter(lambda x: '.' in x, chunks)
 
 
 	def __init__(self, text):
