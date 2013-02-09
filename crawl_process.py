@@ -20,7 +20,7 @@ from backend.db import SoftwareVersionsController, SoftwareVersion, RawArticle
 
 
 def main():
-    core.configure_logging()
+    core.configure_logging("crawl_process")
 
     multi   = "--multi" in sys.argv
 
@@ -45,7 +45,7 @@ def main():
 
         status = cp.process_record((article.crawl_id, (article.headers, article.content, article.url, \
             article.date_crawled, article.content_type)))
-        if status is None:
+        if status is None or status is False:
             article.status = "Error"
         else:
             article.status = "Processed"
