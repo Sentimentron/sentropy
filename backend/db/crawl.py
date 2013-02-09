@@ -43,7 +43,7 @@ class RawArticleResult(Base):
 
 	__tablename__ = 'raw_article_results'
 
-	raw_article_id = Column(Integer, ForeignKey('raw_artices.id'), primary_key = True) 
+	raw_article_id = Column(Integer, ForeignKey('raw_articles.id'), primary_key = True) 
 	status      = Column(Enum("Processed", "Unprocessed", "Error"), nullable = False, default="Unprocessed")
 
 	def __init__(self, rid, status):
