@@ -28,6 +28,80 @@ def annotated_insert(insert, compiler, **kw):
 		insert = insert.prefix_with('IGNORE')
 	return compiler.visit_insert(insert, **kw)
 
+class UserQuery(Base):
+
+	__tablename__ = 'queries'
+
+	id 			= Column(Integer, Sequence('query_id_seq'), primary_key = True)
+	text 		= Column(String(255), unique = True, nullable = False)
+
+    @classmethod
+    def get_keywords(cls, q):
+        chunks = q.split(' ')
+        ret = []
+        for c in chunks:
+            valid = False
+            for l in c:
+                valid = valid or (l >= 'a' and l <= 'z')
+                valid = valid or (l >= 'A' and l <= 'Z')
+                valid = valid or (l >= '0' and l <= '9')
+            if not valid:
+                continue
+            ret.append(c)
+        return ret 
+
+    @classmethod
+    def get_domains(cls, q):
+        chunks = q.split(' ')
+        return filter(lambda x: '.' in x, chunks)
+
+
+	def __init__(self, text):
+		self.text = text 
+
+class UserQueryKeywordRecord(Base):
+
+	__tablename__ = 'queries_keywords'
+
+	id 			= Column(Integer, ForeignKey('queries.id'), primary_key = True)
+	keyword_id 	= Column(Integer, ForeignKey('keywords.id'), nullable = False)
+
+	query 		= relationship("UserQuery", backref = "keywords")
+	keyword     = relationship("Keyword")
+
+	def __init__(self, query, keyword):
+		self.query   = query
+		self.keyword = keyword
+
+
+class UserQueryDomainRecord(Base)
+
+	__tablename__ = 'queries_domains'
+
+	id 			= Column(Integer, ForeignKey('queries.id'), primary_key = True)
+	domain_id 	= Column(Integer, ForeignKey('domains.id'), nullable = False )
+
+	query 		= relationship("UserQuery", backref = "domains")
+	domain      = relationship("Domain")
+
+	def __init__(self, query, domain):
+		self.domain = domain 
+		self.query  = query
+
+class UserQueryArticleRecord(Base):
+
+	__tablename__ = 'queries_articles'
+
+	id 			= Column(Integer, ForeignKey('queries.id'), primary_key = True)
+	article_id 	= Column(Integer, ForeignKey('articles.id'), nullable = False)
+
+	query 		= relationship("UserQuery", backref = "articles")
+	article     = relationship("Article")
+
+	def __init__(self, query, article):
+		self.article = article 
+		self.query   = query 
+
 class RawArticle(Base):
 
 	__tablename__ = 'raw_articles'

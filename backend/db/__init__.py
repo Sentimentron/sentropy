@@ -7,3 +7,5 @@ from crawl import KeywordIncidence, SoftwareInvolvementRecord
 from crawl import CertainDate, AmbiguousDate
 from crawl import KeywordAdjacency, RelativeLink, AbsoluteLink
 from crawl import RawArticle
+
+from crawl import UserQuery, UserQueryKeywordRecord, UserQueryDomainRecord, UserQueryArticleRecord
