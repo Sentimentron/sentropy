@@ -18,6 +18,7 @@ from sqlalchemy.orm.exc import *
 
 from backend import CrawlQueue, CrawlFileController, CrawlProcessor, ProcessQueue
 from backend.db import SoftwareVersionsController, SoftwareVersion, RawArticle
+from backend.db import RawArticleResult, RawArticleResultLink
 
 def worker_init():
     global cp 
