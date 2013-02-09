@@ -73,9 +73,9 @@ def main():
     engine = create_engine(engine, encoding='utf-8', isolation_level="READ COMMITTED")
     logging.info("Binding session...")
     session = Session(bind=engine, autocommit = False)
+    p  = ProcessQueue()
 
     if multi:
-        p  = ProcessQueue()
         pool = multiprocessing.Pool(None, worker_init)
 
         ids  = pool.imap(worker_func, p)
