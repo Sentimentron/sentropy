@@ -169,7 +169,7 @@ class CrawlProcessor(object):
         if len(item) != 2:
             raise ValueError(item)
         if not self._check_processed(item):
-            return False
+            return None
         ret, retries = None, 2
         while ret == None and retries > 0:
             try:
