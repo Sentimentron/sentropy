@@ -34,6 +34,8 @@ def worker_init():
 
 def has_article_been_processed(article_id):
     it = session.query(RawArticleResult).get(article_id)
+    if it is None:
+        return False 
     try:
         it = it.one()
         return True 
