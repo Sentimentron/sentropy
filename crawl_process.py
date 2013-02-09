@@ -86,7 +86,7 @@ def main():
     if multi:
         pool = multiprocessing.Pool(None, worker_init)
 
-        ids  = pool.imap(worker_func, p)
+        ids  = pool.imap(worker_func, p, 2)
         for article_id in ids:
             if article_id is None:
                 continue
