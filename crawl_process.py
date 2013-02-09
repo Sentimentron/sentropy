@@ -37,7 +37,7 @@ def has_article_been_processed(article_id):
     try:
         it = it.one()
         return True 
-    except NoResultsFound as ex:
+    except NoResultFound as ex:
         return False 
 
 def worker_func(article_id):
