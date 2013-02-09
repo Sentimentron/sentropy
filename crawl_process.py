@@ -51,7 +51,7 @@ def worker_func(article_id):
     if has_article_been_processed(article_id):
         return None 
 
-    article = session.query(Article).get(article_id)
+    article = session.query(RawArticle).get(article_id)
     if article is None:
         logging.error("Article doesn't exist: shouldn't be possible. %d", article_id)
         return None 
