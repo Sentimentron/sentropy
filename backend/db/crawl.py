@@ -74,7 +74,7 @@ class UserQueryKeywordRecord(Base):
 		self.keyword = keyword
 
 
-class UserQueryDomainRecord(Base)
+class UserQueryDomainRecord(Base):
 
 	__tablename__ = 'queries_domains'
 
