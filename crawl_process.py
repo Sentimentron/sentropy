@@ -18,6 +18,7 @@ from sqlalchemy.orm.exc import *
 
 from backend import CrawlQueue, CrawlFileController, CrawlProcessor, ProcessQueue
 from backend.db import SoftwareVersionsController, SoftwareVersion, RawArticle
+from backend.db import RawArticleResult, RawArticleResultLink
 
 def worker_init():
     global cp 
@@ -31,25 +32,43 @@ def worker_init():
     session = Session(bind=engine, autocommit = False)
 
 
+def has_article_been_processed(article_id):
+    it = session.query(RawArticleResult).get(article_id)
+    if it is None:
+        return False 
+    try:
+        it = it.one()
+        return True 
+    except NoResultFound as ex:
+        return False 
+
 def worker_func(article_id):
-    article = session.query(RawArticle).get(article_id)
-    if article is None:
-        logging.error("%d doesn't exist!")
+
+    status = None 
+    record = None 
+    result_link = None 
+
+    if has_article_been_processed(article_id):
         return None 
 
-    if article.status != "Unprocessed":
-        logging.error("%d@%s: status %s", article_id, article.url, article.status)
+    article = session.query(RawArticle).get(article_id)
+    if article is None:
+        logging.error("Article doesn't exist: shouldn't be possible. %d", article_id)
+        return None 
 
     status = cp.process_record((article.crawl_id, (article.headers, article.content, article.url, \
         article.date_crawled, article.content_type)))
-    if status is None:
-        article.status = "Error"
-    else:
-        article.status = "Processed"
-        article.inserted_id = status
 
-    logging.info("%d: status changed to %s", article.id, article.status)
+    if status is None:
+        record = RawArticleResult(article_id, "Error")
+    else:
+        record = RawArticleResult(article_id, "Processed")
+        result_link = RawArticleResultLink(article_id, status)
+        session.add(result_link)
+
+    session.add(record)
     session.commit()
+
     return article_id
 
 def main():
@@ -62,15 +81,19 @@ def main():
     engine = create_engine(engine, encoding='utf-8', isolation_level="READ COMMITTED")
     logging.info("Binding session...")
     session = Session(bind=engine, autocommit = False)
-
     p  = ProcessQueue()
-    pool = multiprocessing.Pool(None, worker_init)
 
-    ids  = pool.imap(worker_func, p)
-    for article_id in ids:
-        if article_id is None:
-            continue
-        p.set_completed(article_id)
+    if multi:
+        pool = multiprocessing.Pool(None, worker_init)
+
+        ids  = pool.imap(worker_func, p)
+        for article_id in ids:
+            if article_id is None:
+                continue
+            p.set_completed(article_id)
+    else:
+        worker_init()
+        map(worker_func, p)
 
 if __name__ == "__main__":
     main()

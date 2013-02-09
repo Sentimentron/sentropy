@@ -102,19 +102,40 @@ class UserQueryArticleRecord(Base):
 		self.article = article 
 		self.query   = query 
 
+class RawArticleResultLink(Base):
+
+	__tablename__ = 'raw_article_conversions'
+
+	raw_article_id = Column(Integer, ForeignKey('raw_articles.id'), primary_key = True)
+	inserted_id    = Column(Integer, ForeignKey('articles.id'))
+
+	def __init__(self, rid, iid):
+		self.raw_article_id = rid
+		self.inserted_id    = iid 
+
+class RawArticleResult(Base):
+
+	__tablename__ = 'raw_article_results'
+
+	raw_article_id = Column(Integer, ForeignKey('raw_articles.id'), primary_key = True) 
+	status      = Column(Enum("Processed", "Unprocessed", "Error"), nullable = False, default="Unprocessed")
+
+	def __init__(self, rid, status):
+
+		self.raw_article_id = rid 
+		self.status         = status 
+
 class RawArticle(Base):
 
 	__tablename__ = 'raw_articles'
 
 	id 			= Column(Integer, Sequence('rawarticle_id_seq'), primary_key = True)
 	crawl_id 	= Column(Integer, ForeignKey('crawl_files.id'), nullable = False)
-	status      = Column(Enum("Processed", "Unprocessed", "Error"), nullable = False, default="Unprocessed")
 	headers 	= Column(Text, nullable = False, default = '')
 	content 	= Column(LargeBinary, nullable = False, default = '')
 	date_crawled= Column(DateTime, nullable = False)
 	url 		= Column(Text, nullable = False)
 	content_type= Column(Text, nullable = False)
-	inserted_id = Column(Integer, ForeignKey("articles.id"), nullable = True)
 
 	def __init__(self, item):
 		self.crawl_id, record = item 
