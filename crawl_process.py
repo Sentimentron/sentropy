@@ -60,7 +60,7 @@ def worker_func(article_id):
 
     session.add(record)
     session.commit()
-    
+
     return article_id
 
 def main():
@@ -74,14 +74,18 @@ def main():
     logging.info("Binding session...")
     session = Session(bind=engine, autocommit = False)
 
-    p  = ProcessQueue()
-    pool = multiprocessing.Pool(None, worker_init)
+    if multi:
+        p  = ProcessQueue()
+        pool = multiprocessing.Pool(None, worker_init)
 
-    ids  = pool.imap(worker_func, p)
-    for article_id in ids:
-        if article_id is None:
-            continue
-        p.set_completed(article_id)
+        ids  = pool.imap(worker_func, p)
+        for article_id in ids:
+            if article_id is None:
+                continue
+            p.set_completed(article_id)
+    else:
+        worker_init()
+        map(worker_func, p)
 
 if __name__ == "__main__":
     main()
