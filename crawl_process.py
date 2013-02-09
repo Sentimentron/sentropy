@@ -31,25 +31,36 @@ def worker_init():
     session = Session(bind=engine, autocommit = False)
 
 
-def worker_func(article_id):
-    article = session.query(RawArticle).get(article_id)
-    if article is None:
-        logging.error("%d doesn't exist!")
-        return None 
+def has_article_been_processed(article_id):
+    it = session.query(RawArticleResult).get(article_id)
+    try:
+        it = it.one()
+        return True 
+    except NoResultsFound as ex:
+        return False 
 
-    if article.status != "Unprocessed":
-        logging.error("%d@%s: status %s", article_id, article.url, article.status)
+def worker_func(article_id):
+
+    status = None 
+    record = None 
+    result_link = None 
+
+    if has_article_been_processed(article_id):
+        return None 
 
     status = cp.process_record((article.crawl_id, (article.headers, article.content, article.url, \
         article.date_crawled, article.content_type)))
-    if status is None:
-        article.status = "Error"
-    else:
-        article.status = "Processed"
-        article.inserted_id = status
 
-    logging.info("%d: status changed to %s", article.id, article.status)
+    if status is None:
+        record = RawArticleResult(article_id, "Error")
+    else:
+        record = RawArticleResult(article_id, "Processed")
+        result_link = RawArticleResultLink(article_id, status)
+        session.add(result_link)
+
+    session.add(record)
     session.commit()
+    
     return article_id
 
 def main():
