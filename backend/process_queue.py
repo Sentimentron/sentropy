@@ -64,7 +64,6 @@ class ProcessQueue(object):
 
 		msg = self._messages[what]
 		assert msg is not None
-		assert type(msg) is Message
 		assert self._queue.delete_message(msg)
 		self._messages.pop(what, None)
 
