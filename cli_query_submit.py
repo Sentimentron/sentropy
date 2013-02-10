@@ -64,7 +64,7 @@ if __name__ == "__main__":
     # Database connection
     engine = core.get_database_engine_string()
     logging.info("Using connection string '%s'" % (engine,))
-    engine = create_engine(engine, encoding='utf-8', isolation_level = 'READ UNCOMMITTED')
+    engine = create_engine(engine, encoding='utf-8', isolation_level = 'READ COMMITTED')
     logging.info("Binding session...")
     session = Session(bind=engine, autocommit = False)
 
@@ -167,7 +167,7 @@ if __name__ == "__main__":
             likely_dates[document.id] = dates["certain"]
             date_methods.update(["Certain"])
         elif dates["uncertain"] is not None:
-            likely_dates[document.id] = dates["certain"]
+            likely_dates[document.id] = dates["uncertain"]
             date_methods.update(["Uncertain"])
         else:
             likely_dates[document.id] = prepare_date(document.parent.crawled.date())
@@ -176,43 +176,55 @@ if __name__ == "__main__":
         logging.info("Query(%d): resolved dates (Certain: %d, Uncertain: %d, Crawled %d)", q.id,\
             date_methods["Certain"], date_methods["Uncertain"], date_methods["Crawled"])
 
+    def generate_summary(documents, likely_dates):
+
+        #
+        # Article volume 
+        document_volume = Counter([likely_dates[document.id] for document in documents])
+
+        #
+        # Sentiment volume (document level)
+        doc_sentiment_pos = Counter([likely_dates[document.id] for document in documents if document.label == "Positive"])
+        doc_sentiment_neg = Counter([likely_dates[document.id] for document in documents if document.label == "Negative"])
+
+        #
+        # Document properties computation
+        #properties = dict([(likely_dates[document.id], document) for document in documents])
+        properties = {}
+        for document in documents:
+            date = likely_dates[document.id]
+            if date not in properties:
+                properties[date] = set([])
+            properties[date].add(document)
+
+
+        def mean(items):
+            if len(items)  == 0:
+                return 0
+            if sum(items) == 0:
+                return 0
+            return len(items)/(1.0*sum(items))
+
+        pos_phrases   = {date : mean([d.pos_phrases for d in properties[date]]) for date in properties}
+        neg_phrases   = {date : mean([d.neg_phrases for d in properties[date]]) for date in properties}
+        pos_sentences = {date : mean([d.pos_sentences for d in properties[date]]) for date in properties}
+        neg_sentences = {date : mean([d.neg_sentences for d in properties[date]]) for date in properties}
+
+        # Zip into a results dict
+        return {
+            'info' : {'documents_returned': len(documents)}
+            'document_volume': [[date, document_volume[date]] for date in document_volume],
+            'document_sentiment_pos': [[date, doc_sentiment_pos[date]] for date in doc_sentiment_pos],
+            'document_sentiment_neg': [[date, doc_sentiment_neg[date]] for date in doc_sentiment_neg],
+            'pos_phrases': [[date, pos_phrases[date]] for date in pos_phrases],
+            'neg_phrases': [[date, neg_phrases[date]] for date in neg_phrases],
+            'pos_sentences' : [[date, pos_sentences[date]] for date in pos_sentences],
+            'neg_sentences' : [[date, neg_sentences[date]] for date in neg_sentences]
+        }
+
 
     #
-    # Article volume 
-    document_volume = Counter([likely_dates[document.id] for document in documents])
-    raw_input(document_volume)
-
-    #
-    # Sentiment volume (document level)
-    doc_sentiment_volume = Counter([(likely_dates[document.id], document.label) for document in documents])
-    print doc_sentiment_volume
-
-    #
-    # Document properties computation
-    #properties = dict([(likely_dates[document.id], document) for document in documents])
-    properties = {}
-    for document in documents:
-        date = likely_dates[document.id]
-        if date not in properties:
-            properties[date] = set([])
-        properties[date].add(document)
-
-    print properties
-
-    def mean(items):
-        if len(items)  == 0:
-            return 0
-        if sum(items) == 0:
-            return 0
-        return len(items)/(1.0*sum(items))
-
-    pos_phrases   = {date : mean([d.pos_phrases for d in properties[date]]) for date in properties}
-    neg_phrases   = {date : mean([d.neg_phrases for d in properties[date]]) for date in properties}
-    pos_sentences = {date : mean([d.pos_sentences for d in properties[date]]) for date in properties}
-    neg_sentences = {date : mean([d.neg_sentences for d in properties[date]]) for date in properties}
-
-    #
-    # Collection general information
+    # General information
     info = {#'articles': session.query(Article).count(),
         #'documents': session.query(Document).count(),
         #'keywords' : session.query(Keyword).count(),
@@ -224,18 +236,18 @@ if __name__ == "__main__":
         'keywords_returned': len(keywords)
     }
 
-    #
-    # Zip into a results dict
-    result = {'info': info,
-        'document_volume': [[date, document_volume[date]] for date in document_volume],
-        'document_sentiment': [[date, doc_sentiment_volume[date]] for date in doc_sentiment_volume],
-        'pos_phrases': [[date, pos_phrases[date]] for date in pos_phrases],
-        'neg_phrases': [[date, neg_phrases[date]] for date in neg_phrases],
-        'pos_sentences' : [[date, pos_sentences[date]] for date in pos_sentences],
-        'neg_sentences' : [[date, neg_sentences[date]] for date in neg_sentences]
+    result = {
+        'info': info, 
+        'overview': generate_summary(documents, likely_dates)
     }
 
-    print json.dumps(result)
+    for domain in domains:
+        subdoc = filter(lambda x: x.parent.domain == domain, documents)
+        result[domain.key] = generate_summary(subdoc, likely_dates)
+
+
+
+    print json.dumps(result, indent=4)
 
 
     #
