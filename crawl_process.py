@@ -8,6 +8,7 @@ import os
 import sys
 
 import core
+import itertools
 import requests
 import multiprocessing
 
@@ -79,17 +80,18 @@ def main():
     session = Session(bind=engine, autocommit = False)
     p  = ProcessQueue()
 
+    ids = None
     if multi:
         pool = multiprocessing.Pool(None, worker_init)
-
         ids  = pool.imap(worker_func, p, 2)
-        for article_id in ids:
-            if article_id is None:
-                continue
-            p.set_completed(article_id)
     else:
         worker_init()
-        map(worker_func, p)
+        ids = itertools.imap(worker_func, p)
+
+    for article_id in ids:
+        if article_id is None:
+            continue
+        p.set_completed(article_id)
 
 if __name__ == "__main__":
     main()

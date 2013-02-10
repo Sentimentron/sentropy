@@ -198,6 +198,10 @@ class CrawlProcessor(object):
 
         status = "Processed"
 
+        # Fix for a seg-fault
+        if "nasa.gov" in url:
+            return False
+
         # Sort out the domain
         domain_identifier = None 
         logging.info("Retrieving domain...")

@@ -2,6 +2,7 @@
 
 import logging
 import re
+import string
 import types
 
 from sqlalchemy.ext.compiler import compiles 
@@ -19,6 +20,9 @@ KEY_VAL = re.compile("^([a-z0-9]([-a-z0-9]*[a-z0-9])?\\.)+((a[cdefgilmnoqrstuwxz
 
 Base = declarative_base()
 
+allowed_keyword_chars = set(string.letters + string.digits)
+allowed_domain_chars = set(string.lowercase + '.')
+
 # Prefix all INSERTs with INSERT IGNORE to help stop race conditions
 @compiles(expression.Insert) 
 def annotated_insert(insert, compiler, **kw): 
@@ -34,27 +38,31 @@ class UserQuery(Base):
 
 	id 			= Column(Integer, Sequence('query_id_seq'), primary_key = True)
 	text 		= Column(String(255), unique = True, nullable = False)
+	fulfilled   = Column(DateTime)
+
+	@validates('text')
+	def validate(self, key, value):
+		if len(value) > 255:
+			raise ValueError(value)
+		return value
 
 	@classmethod
 	def get_keywords(cls, q):
 		chunks = q.split(' ')
 		ret = []
 		for c in chunks:
-			valid = False
-			for l in c:
-				valid = valid or (l >= 'a' and l <= 'z')
-				valid = valid or (l >= 'A' and l <= 'Z')
-				valid = valid or (l >= '0' and l <= '9')
-			if not valid:
-				continue
-			ret.append(c)
+			if len(set(c) - allowed_keyword_chars) == 0:
+				ret.append(c)
 		return ret 
 
 	@classmethod
 	def get_domains(cls, q):
 		chunks = q.split(' ')
-		return filter(lambda x: '.' in x, chunks)
-
+		ret = []
+		for c in chunks:
+			if len(set(c) - allowed_domain_chars) == 0:
+				ret.append(c)
+		return ret
 
 	def __init__(self, text):
 		self.text = text 
