@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import *
 from sqlalchemy.orm.session import Session 
 from sqlalchemy.orm.exc import *
+from sqlalchemy.orm import * 
 
 from backend.db import UserQuery, UserQueryKeywordRecord, UserQueryDomainRecord, UserQueryArticleRecord
 from backend.db import Keyword, Domain, KeywordAdjacency, Article
@@ -73,7 +74,7 @@ if __name__ == "__main__":
     # Article domain resolution
     documents_domains = set([])
     for d in domains:
-        articles_it = session.query(Article).filter_by(domain = d)
+        articles_it = session.query(Article).filter_by(domain = d).options(joinedload('documents'))
         for article in articles_it:
             documents_domains.update(article.documents)
     logging.info("Query(%d): retrieved %d documents relevant to a domain", q.id, len(documents_domains))
@@ -82,11 +83,11 @@ if __name__ == "__main__":
     documents_keywords = set([])
     if raw_keyword_count > 1:
         for id1, id2 in itertools.combinations(keywords, 2):
-            it = session.query(KeywordAdjacency).filter_by(key1 = id1).filter_by(key2 = id2)
+            it = session.query(KeywordAdjacency).filter_by(key1 = id1).filter_by(key2 = id2).options(joinedload('document'))
             documents_keywords.update([i.document for i in it])
     else:
         for keyword in keywords:
-            it = session.query(KeywordAdjacency).filter((KeywordAdjacency.key1 == keyword) | (KeywordAdjacency.key2 == keyword))
+            it = session.query(KeywordAdjacency).filter((KeywordAdjacency.key1 == keyword) | (KeywordAdjacency.key2 == keyword)).options(joinedload('document'))
             documents_keywords.update([i.document for i in it])
     logging.info("Query(%d): retrieved %d documents relevant to a keyword", q.id, len(documents_keywords))
 
