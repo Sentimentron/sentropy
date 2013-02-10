@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import math
 import itertools
 import sys
 import logging
@@ -12,7 +13,19 @@ from sqlalchemy.orm.exc import *
 from sqlalchemy.orm import * 
 
 from backend.db import UserQuery, UserQueryKeywordRecord, UserQueryDomainRecord, UserQueryArticleRecord
-from backend.db import Keyword, Domain, KeywordAdjacency, Article
+from backend.db import Keyword, Domain, KeywordAdjacency, Article, Document
+
+def compute_likely_date(date_recs, certain = False):
+    ret = None 
+    if certain:
+        mean = 346
+    else:
+        mean = 307 # Something, I don't know
+
+    errors = [((p-mean)*(p-mean), j) for p, j in date_recs]
+    least  = sorted(errors, key = lambda x: x[0])
+    for error, rec in least:
+        return rec 
 
 if __name__ == "__main__":
 
@@ -103,4 +116,28 @@ if __name__ == "__main__":
         documents = documents_keywords
     logging.info("Query(%d): final document set contains %d elements", q.id, len(documents))
 
-    print documents 
+    #
+    # Load document dependent properties
+    document_ids = set([d.id for d in documents])
+    documents    = set([])
+
+    for _id in document_ids:
+        document = session.query(Document).options(joinedload('*')).get(_id)
+        documents.add(document)
+
+    #
+    # Date resolution 
+    likely_dates = {}
+    for document in documents:
+        dates = {'crawled': document.parent.crawled, 'certain': set([]), 'uncertain': set([])}
+        for certain_date in document.certain_dates:
+            dates['certain'].add((certain_date.position, certain_date.date))
+        for uncertain_date in document.uncertain_dates:
+            dates['uncertain'].add((uncertain_date.position, uncertain_date.date))
+
+        raw_input(dates)
+
+        dates['certain'] = compute_likely_date(dates['certain'])
+        dates['uncertain'] = compute_likely_date(dates['uncertain'])
+
+        raw_input((dates, document.parent.path))
