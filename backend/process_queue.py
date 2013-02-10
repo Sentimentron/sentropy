@@ -40,7 +40,6 @@ class ProcessQueue(object):
 				break
 
 			rs = self._queue.get_messages()
-			logging.info("Currently %d items in the queue", len(rs))
 			for item in rs:
 				iden = int(item.get_body())
 				self._messages[iden] = item
@@ -64,8 +63,10 @@ class ProcessQueue(object):
 		logging.info("Marking %d as completed...", what)
 
 		msg = self._messages[what]
-		self._queue.delete_message(msg)
-		del msg
+		assert msg is not None
+		assert type(msg) is Message
+		assert self._queue.delete_message(msg)
+		self._messages.pop(what, None)
 
 	def _get_queueItemAvailabilityStatus(self):
 		status = self._queue.count() > 0

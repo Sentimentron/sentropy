@@ -36,11 +36,7 @@ def has_article_been_processed(article_id):
     it = session.query(RawArticleResult).get(article_id)
     if it is None:
         return False 
-    try:
-        it = it.one()
-        return True 
-    except NoResultFound as ex:
-        return False 
+    return True 
 
 def worker_func(article_id):
 
@@ -49,7 +45,7 @@ def worker_func(article_id):
     result_link = None 
 
     if has_article_been_processed(article_id):
-        return None 
+        return article_id 
 
     article = session.query(RawArticle).get(article_id)
     if article is None:
