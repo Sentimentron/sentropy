@@ -5,6 +5,11 @@ import itertools
 import sys
 import logging
 import core
+import time
+import json
+import calendar
+import types
+import datetime
 
 from sqlalchemy import create_engine
 from sqlalchemy.exc import *
@@ -13,7 +18,19 @@ from sqlalchemy.orm.exc import *
 from sqlalchemy.orm import * 
 
 from backend.db import UserQuery, UserQueryKeywordRecord, UserQueryDomainRecord, UserQueryArticleRecord
-from backend.db import Keyword, Domain, KeywordAdjacency, Article, Document
+from backend.db import Keyword, Domain, KeywordAdjacency, Article, Document, KeywordIncidence, Sentence, Phrase
+
+from collections import Counter
+
+def prepare_date(input_date):
+    if type(input_date) is types.TupleType:
+        return time.mktime(input_date) * 1000
+    elif type(input_date) is datetime.datetime:
+        return time.mktime(input_date.date().timetuple()) * 1000
+    elif type(input_date) is datetime.date:
+        return time.mktime(input_date.timetuple()) * 1000
+    else:
+        raise TypeError(type(input_date))
 
 def compute_likely_date(date_recs, certain = False):
     ret = None 
@@ -22,10 +39,17 @@ def compute_likely_date(date_recs, certain = False):
     else:
         mean = 307 # Something, I don't know
 
+    logging.debug(len(date_recs))
+
     errors = [((p-mean)*(p-mean), j) for p, j in date_recs]
-    least  = sorted(errors, key = lambda x: x[0])
-    for error, rec in least:
-        return rec 
+    min_error = sys.maxint
+    min_value = None
+    for error, rec in errors:
+        if error < min_error:
+            min_error = error 
+            min_value = rec 
+
+    return min_value
 
 if __name__ == "__main__":
 
@@ -40,7 +64,7 @@ if __name__ == "__main__":
     # Database connection
     engine = core.get_database_engine_string()
     logging.info("Using connection string '%s'" % (engine,))
-    engine = create_engine(engine, encoding='utf-8')
+    engine = create_engine(engine, encoding='utf-8', isolation_level = 'READ UNCOMMITTED')
     logging.info("Binding session...")
     session = Session(bind=engine, autocommit = False)
 
@@ -122,22 +146,97 @@ if __name__ == "__main__":
     documents    = set([])
 
     for _id in document_ids:
-        document = session.query(Document).options(joinedload('*')).get(_id)
+        document = session.query(Document).options(joinedload('*'), joinedload('sentences.phrases'), joinedload('sentences.phrases.keyword_incidences'), joinedload('sentences.phrases.keyword_incidences')).get(_id)
         documents.add(document)
 
     #
     # Date resolution 
     likely_dates = {}
+    date_methods = Counter()
     for document in documents:
-        dates = {'crawled': document.parent.crawled, 'certain': set([]), 'uncertain': set([])}
+        dates = {'certain': set([]), 'uncertain': set([])}
         for certain_date in document.certain_dates:
-            dates['certain'].add((certain_date.position, certain_date.date))
+            dates['certain'].add((certain_date.position, prepare_date(certain_date.date)))
         for uncertain_date in document.uncertain_dates:
-            dates['uncertain'].add((uncertain_date.position, uncertain_date.date))
-
-        raw_input(dates)
+            dates['uncertain'].add((uncertain_date.position, prepare_date(uncertain_date.date)))
 
         dates['certain'] = compute_likely_date(dates['certain'])
-        dates['uncertain'] = compute_likely_date(dates['uncertain'])
+        dates['uncertain'] = compute_likely_date(dates['uncertain'], False)
 
-        raw_input((dates, document.parent.path))
+        if dates["certain"] is not None:
+            likely_dates[document.id] = dates["certain"]
+            date_methods.update(["Certain"])
+        elif dates["uncertain"] is not None:
+            likely_dates[document.id] = dates["certain"]
+            date_methods.update(["Uncertain"])
+        else:
+            likely_dates[document.id] = prepare_date(document.parent.crawled.date())
+            date_methods.update(["Crawled"])
+
+        logging.info("Query(%d): resolved dates (Certain: %d, Uncertain: %d, Crawled %d)", q.id,\
+            date_methods["Certain"], date_methods["Uncertain"], date_methods["Crawled"])
+
+
+    #
+    # Article volume 
+    document_volume = Counter([likely_dates[document.id] for document in documents])
+    raw_input(document_volume)
+
+    #
+    # Sentiment volume (document level)
+    doc_sentiment_volume = Counter([(likely_dates[document.id], document.label) for document in documents])
+    print doc_sentiment_volume
+
+    #
+    # Document properties computation
+    #properties = dict([(likely_dates[document.id], document) for document in documents])
+    properties = {}
+    for document in documents:
+        date = likely_dates[document.id]
+        if date not in properties:
+            properties[date] = set([])
+        properties[date].add(document)
+
+    print properties
+
+    def mean(items):
+        if len(items)  == 0:
+            return 0
+        if sum(items) == 0:
+            return 0
+        return len(items)/(1.0*sum(items))
+
+    pos_phrases   = {date : mean([d.pos_phrases for d in properties[date]]) for date in properties}
+    neg_phrases   = {date : mean([d.neg_phrases for d in properties[date]]) for date in properties}
+    pos_sentences = {date : mean([d.pos_sentences for d in properties[date]]) for date in properties}
+    neg_sentences = {date : mean([d.neg_sentences for d in properties[date]]) for date in properties}
+
+    #
+    # Collection general information
+    info = {#'articles': session.query(Article).count(),
+        #'documents': session.query(Document).count(),
+        #'keywords' : session.query(Keyword).count(),
+        #'keyword_incidences' : session.query(KeywordIncidence).count(),
+        #'keyword_bigrams': session.query(KeywordAdjacency).count(),
+        #'sentences': session.query(Sentence).count(),
+        #'phrases': session.query(Phrase).count(),
+        'domains_returned': len(domains),
+        'keywords_returned': len(keywords)
+    }
+
+    #
+    # Zip into a results dict
+    result = {'info': info,
+        'document_volume': [[date, document_volume[date]] for date in document_volume],
+        'document_sentiment': [[date, doc_sentiment_volume[date]] for date in doc_sentiment_volume],
+        'pos_phrases': [[date, pos_phrases[date]] for date in pos_phrases],
+        'neg_phrases': [[date, neg_phrases[date]] for date in neg_phrases],
+        'pos_sentences' : [[date, pos_sentences[date]] for date in pos_sentences],
+        'neg_sentences' : [[date, neg_sentences[date]] for date in neg_sentences]
+    }
+
+    print json.dumps(result)
+
+
+    #
+    # 
