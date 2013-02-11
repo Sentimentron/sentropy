@@ -51,7 +51,7 @@ def worker_func(article_id):
     article = session.query(RawArticle).get(article_id)
     if article is None:
         logging.error("Article doesn't exist: shouldn't be possible. %d", article_id)
-        return None 
+        return article_id 
 
     status = cp.process_record((article.crawl_id, (article.headers, article.content, article.url, \
         article.date_crawled, article.content_type)))
