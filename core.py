@@ -35,10 +35,7 @@ def configure_logging(prefix='sentropy'):
 		raise Exception("/var/log/sentropy needs to exist!")
 
 	logger = logging.getLogger()
-	hdlr = logging.FileHandler('/var/log/sentropy/%s.log' % (prefix,))
 	formatter = logging.Formatter('%(asctime)-15s:%(filename)s:%(lineno)d:%(funcName)s:%(process)d:%(message)s')
-	hdlr.setFormatter(formatter)
-	logger.addHandler(hdlr) 
 	cons = logging.StreamHandler()
 	cons.setFormatter(formatter)
 	logger.addHandler(cons)
