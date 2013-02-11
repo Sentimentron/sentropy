@@ -212,7 +212,7 @@ if __name__ == "__main__":
 
         # Zip into a results dict
         return {
-            'info' : {'documents_returned': len(documents)}
+            'info' : {'documents_returned': len(documents)},
             'document_volume': [[date, document_volume[date]] for date in document_volume],
             'document_sentiment_pos': [[date, doc_sentiment_pos[date]] for date in doc_sentiment_pos],
             'document_sentiment_neg': [[date, doc_sentiment_neg[date]] for date in doc_sentiment_neg],
