@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import *
 from sqlalchemy.orm.session import Session 
 from sqlalchemy.orm.exc import *
+from sqlalchemy.orm import *
 
 from backend import CrawlQueue, CrawlFileController, CrawlProcessor, ProcessQueue
 from backend.db import RawArticle, CrawlController
@@ -57,8 +58,11 @@ def main():
             r.mark_CrawlFile_complete(crawl_file)
             q.set_completed(crawl_file)
     if "--documents" in sys.argv:
-        for a in session.query(RawArticle).options(joinedload('result')).filter_by(result = None):
-            p.add_id(a.id)
+	it = session.execute("SELECT id FROM raw_articles WHERE id NOT IN (SELECT raw_article_id FROM raw_article_results)")
+        for i, in it:
+            logging.info(i)
+            p.add_id(i)
+
 
 if __name__ == '__main__':
     main()

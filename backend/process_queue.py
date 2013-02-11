@@ -11,7 +11,7 @@ import boto.sqs
 from db import CrawlController, CrawlFile, CrawlSource
 from boto.sqs.message import Message
 
-DEFAULT_QUEUE_NAME = "process-queue"
+DEFAULT_QUEUE_NAME = "process-queue-2"
 SQS_REGION = "us-east-1"
 
 class ProcessQueue(object):
