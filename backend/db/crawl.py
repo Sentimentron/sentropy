@@ -116,6 +116,8 @@ class RawArticleResultLink(Base):
 
 	raw_article_id = Column(Integer, ForeignKey('raw_articles.id'), primary_key = True)
 	inserted_id    = Column(Integer, ForeignKey('articles.id'))
+	parent = relationship("RawArticle", backref="result_link")
+
 
 	def __init__(self, rid, iid):
 		self.raw_article_id = rid
@@ -127,6 +129,8 @@ class RawArticleResult(Base):
 
 	raw_article_id = Column(Integer, ForeignKey('raw_articles.id'), primary_key = True) 
 	status      = Column(Enum("Processed", "Unprocessed", "Error"), nullable = False, default="Unprocessed")
+
+	parent = relationship("RawArticle", backref="result")
 
 	def __init__(self, rid, status):
 
