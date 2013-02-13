@@ -28,7 +28,7 @@ def main():
     logging.info("Binding session...")
     session = Session(bind=engine, autocommit = False)
 
-    it = session.query(CrawlFile).filter_by(status = 'Incomplete').limit(1)
+    it = session.query(CrawlFile).filter_by(status = 'Incomplete').filter(CrawlFile.key.contains("2008")).limit(1)
 
     if "--files" in sys.argv:            
         for crawl_file in it:
