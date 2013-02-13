@@ -112,9 +112,9 @@ class UserQueryArticleRecord(Base):
 
 class RawArticleResultLink(Base):
 
-	__tablename__ = 'raw_article_conversions'
+	__tablename__ = 'raw_article_conversions_2'
 
-	raw_article_id = Column(Integer, ForeignKey('raw_articles.id'), primary_key = True)
+	raw_article_id = Column(Integer, ForeignKey('raw_articles_2.id'), primary_key = True)
 	inserted_id    = Column(Integer, ForeignKey('articles.id'))
 	parent = relationship("RawArticle", backref="result_link")
 
@@ -125,9 +125,9 @@ class RawArticleResultLink(Base):
 
 class RawArticleResult(Base):
 
-	__tablename__ = 'raw_article_results'
+	__tablename__ = 'raw_article_results_2'
 
-	raw_article_id = Column(Integer, ForeignKey('raw_articles.id'), primary_key = True) 
+	raw_article_id = Column(Integer, ForeignKey('raw_articles_2.id'), primary_key = True) 
 	status      = Column(Enum("Processed", "Unprocessed", "Error"), nullable = False, default="Unprocessed")
 
 	parent = relationship("RawArticle", backref="result")
@@ -139,12 +139,12 @@ class RawArticleResult(Base):
 
 class RawArticle(Base):
 
-	__tablename__ = 'raw_articles'
+	__tablename__ = 'raw_articles_2'
 
 	id 			= Column(Integer, Sequence('rawarticle_id_seq'), primary_key = True)
 	crawl_id 	= Column(Integer, ForeignKey('crawl_files.id'), nullable = False)
-	headers 	= Column(Text, nullable = False, default = '')
-	content 	= Column(LargeBinary, nullable = False, default = '')
+	headers 	= Column(Text, nullable = True)
+	content 	= Column(LargeBinary, nullable = True)
 	date_crawled= Column(DateTime, nullable = False)
 	url 		= Column(Text, nullable = False)
 	content_type= Column(Text, nullable = False)
