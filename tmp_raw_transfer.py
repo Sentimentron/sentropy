@@ -27,6 +27,17 @@ if __name__ == "__main__":
     it = session.execute(sql)
 
     for crawl_id, date_crawled, url, content_type, status, inserted_id in it:
+
+        # Decide if any of these have been comitted
+        sub = session.query(RawArticle).filter_by(crawl_id = crawl_id, url = url, content_type = content_type, date_crawled = date_crawled)
+        try:
+            i = sub.one()
+            logging.info("RawArticle %s has already been processed.", i)
+            continue 
+        except NoResultException:
+            pass
+
+
         rbase = RawArticle((crawl_id, (None, None, url, date_crawled, content_type)))
         rstat = RawArticleResult(None, status)
         rstat.parent = rbase 
