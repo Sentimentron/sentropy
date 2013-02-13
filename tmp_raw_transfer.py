@@ -2,6 +2,8 @@ import logging
 import os
 import sys
 
+import core 
+
 from sqlalchemy import create_engine
 from sqlalchemy.exc import *
 from sqlalchemy.orm.session import Session 
