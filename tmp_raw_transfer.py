@@ -12,9 +12,9 @@ from backend.db import RawArticle, RawArticleResultLink, RawArticleResult
 
 if __name__ == "__main__":
 
-	core.configure_logging()
+    core.configure_logging()
 
-	engine = core.get_database_engine_string()
+    engine = core.get_database_engine_string()
     logging.info("Using connection string '%s'" % (engine,))
     engine = create_engine(engine, encoding='utf-8', isolation_level="READ COMMITTED")
     logging.info("Binding session...")
@@ -25,12 +25,12 @@ if __name__ == "__main__":
     it = session.execute(sql)
 
     for crawl_id, date_crawled, url, content_type, status, inserted_id in it:
-    	rbase = RawArticle((crawl_id, (None, None, url, date_crawled, content_type)))
-    	rstat = RawArticleResult(None, status)
-    	rstat.parent = rbase 
-    	rrslt = RawArticleResultLink(None, inserted_id)
-    	rrslt.parent = rbase 
-    	session.add(rbase)
-    	session.add(rstat)
-    	session.add(rrslt)
-    	session.commit()
+        rbase = RawArticle((crawl_id, (None, None, url, date_crawled, content_type)))
+        rstat = RawArticleResult(None, status)
+        rstat.parent = rbase 
+        rrslt = RawArticleResultLink(None, inserted_id)
+        rrslt.parent = rbase 
+        session.add(rbase)
+        session.add(rstat)
+        session.add(rrslt)
+        session.commit()
