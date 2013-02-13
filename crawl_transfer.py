@@ -11,7 +11,7 @@ from sqlalchemy.orm.exc import *
 from sqlalchemy.orm import *
 
 from backend import CrawlQueue, CrawlFileController, CrawlProcessor, ProcessQueue
-from backend.db import RawArticle, CrawlController
+from backend.db import CrawlFile, RawArticle, CrawlController
 import core
 
 def main():
@@ -19,7 +19,6 @@ def main():
     core.configure_logging()
 
     c = CrawlController(core.get_database_engine_string())
-    q = CrawlQueue(c)
     r = CrawlFileController(c)
     p = ProcessQueue()
 
@@ -29,8 +28,10 @@ def main():
     logging.info("Binding session...")
     session = Session(bind=engine, autocommit = False)
 
+    it = session.query(CrawlFile).filter_by(status = 'Incomplete').limit(1)
+
     if "--files" in sys.argv:            
-        for crawl_file in q:
+        for crawl_file in it:
             records = r.read_CrawlFile(crawl_file)
             if records is None:
                 continue
@@ -56,13 +57,13 @@ def main():
                 p.add_id(a.id)
 
             r.mark_CrawlFile_complete(crawl_file)
-            q.set_completed(crawl_file)
     if "--documents" in sys.argv:
 	it = session.execute("SELECT id FROM raw_articles WHERE id NOT IN (SELECT raw_article_id FROM raw_article_results)")
         for i, in it:
             logging.info(i)
             p.add_id(i)
-
+    
+    logging.info("Crawl process completed.")
 
 if __name__ == '__main__':
     main()

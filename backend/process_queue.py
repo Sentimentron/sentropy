@@ -39,11 +39,12 @@ class ProcessQueue(object):
 			if not self._get_queueItemAvailabilityStatus():
 				break
 
-			rs = self._queue.get_messages()
+			rs = self._queue.get_messages(10)
 			for item in rs:
-				iden = int(item.get_body())
+				assert isinstance(item, Message)
+				iden = long(item.get_body())
 				self._messages[iden] = item
-				yield int(iden)
+				yield iden
 
 	def add_id(self, identifier):
 		identifier = str(identifier)
