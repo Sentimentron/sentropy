@@ -62,6 +62,8 @@ def worker_func(article_id):
         record = RawArticleResult(article_id, "Processed")
         result_link = RawArticleResultLink(article_id, status)
         session.add(result_link)
+        article.headers = None
+        article.content = None 
 
     session.add(record)
     session.commit()
