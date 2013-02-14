@@ -53,6 +53,9 @@ def worker_func(article_id):
         logging.error("Article doesn't exist: shouldn't be possible. %d", article_id)
         return article_id 
 
+    if article.headers is None or article.content is None:
+        return article_id
+
     status = cp.process_record((article.crawl_id, (article.headers, article.content, article.url, \
         article.date_crawled, article.content_type)))
 
