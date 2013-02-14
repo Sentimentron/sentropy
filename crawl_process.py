@@ -54,6 +54,7 @@ def worker_func(article_id):
         return article_id 
 
     if article.headers is None or article.content is None:
+        logging.error("Article %d has NULL headers and/or content. This is possible, but shouldn't happen often", article_id)
         return article_id
 
     status = cp.process_record((article.crawl_id, (article.headers, article.content, article.url, \
