@@ -91,9 +91,8 @@ def main():
         ids = itertools.imap(worker_func, p)
 
     for article_id in ids:
-        if article_id is None:
-            continue
-        p.set_completed(article_id)
+        assert article_id is not None
+	p.set_completed(article_id)
 
 if __name__ == "__main__":
     main()
