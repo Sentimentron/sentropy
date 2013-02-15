@@ -115,6 +115,17 @@ if __name__ == "__main__":
     logging.info("Query(%d): expanded %d raw domains into %d database domains", q.id, raw_domain_count, len(domains))
 
     #
+    # OK, the approach here is to 
+    # 1) Create a temporary table which can hold documents, their article id and their selection criteria
+    # 2) Copy documents with a matching domain into the temporary table 
+    # 3) Copy documents with a matching keyword into the temporary table
+    # 4) Delete records from the temporary table which don't fulfill all of the query criteria
+    # 5) Use the document identifiers to resolve date crawled - our most basic date resolution
+    # 6) Use the document identifiers to identify the most likely certain date - our highest date resolution
+    # 7) For those documents which don't have this, compute an average uncertain date.
+    # 8) Create another temporary table which can hold phrases, copy all the phrases in all of the documents into this table 
+    # 9) Filter keyword incidences by the keywords we have and join with this temporary table to count how many phrases in each document
+    #    are relevant. 
     # Temporary table creation
     sql = """CREATE TEMPORARY TABLE query_%d_articles (
             id INTEGER PRIMARY KEY,
@@ -163,27 +174,34 @@ if __name__ == "__main__":
             ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, keyword.id, keyword.id)
             logging.debug(sql)
             session.execute(sql)
-    logging.info("Query(%d): retrieved %d documents relevant to a keyword", q.id)
+    logging.info("Query(%d): retrieved keyword relevant documents", q.id)
 
     #
     # Final article set resolution 
     assert using_domains or using_keywords
-    documents = set([])
 
-    for id, in session.execute("SELECT doc_id FROM query_%d_articles" % (q.id, )):
-        documents.add(id)
-    logging.info("Query(%d): final document set contains %d elements", q.id, len(documents))
+    sql = "DELETE FROM query_%d_articles WHERE keywords <> %d AND articles <> %d" % (int(using_domains), int(using_keywords))
+    session.execute(sql)
 
     #
-    # Load document dependent properties
-    document_ids = set([d.id for d in documents])
-    documents    = set([])
+    # Date resolution 
+    likely_dates = {}
+    sql = "SELECT articles.id, articles.date_crawled FROM query_%d_articles JOIN articles ON query_%d_articles.id = articles.id" % (q.id, q.id)
+    for _id, date_crawled in session.execute(sql):
+        likely_dates[_id] = ("Crawled", prepare_date(date_crawled))
 
-    for _id in document_ids:
-        document = session.query(Document).get(_id)
-        documents.add(document)
+    sql = """SELECT `date`, doc_id FROM certain_dates GROUP BY doc_id ORDER BY MIN(ABS(position-346)) ASC 
+        JOIN (SELECT position, MIN(ABS(position-346))
+        """
 
-    logging.info("Finished loading final document set.")
+    sql = "UPDATE query_%d_articles, certain_dates SET query_%d_articles.date_certain "
+
+
+    documents = set([])
+    for id, in session.execute("SELECT doc_id FROM query_%d_articles" % (q.id, )):
+        documents.add(session.query(Document).get(id))
+
+    logging.info("Query(%d): final document set contains %d elements", q.id, len(documents))
 
     #
     # Date resolution 
