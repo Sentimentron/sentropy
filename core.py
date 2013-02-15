@@ -39,14 +39,14 @@ def configure_logging(level=None):
 	cons = logging.StreamHandler()
 	cons.setFormatter(formatter)
 	logger.addHandler(cons)
-
-	if "SENT_PRODUCTION_LOG_LEVEL" not in os.environ:
-		log_level = logging.DEBUG
-	else:
-		level = os.environ["SENT_PRODUCTION_LOG_LEVEL"]
-		log_level = LOG_LEVELS[level]
 	
 	if level is not None:
 		log_level = LOG_LEVELS[level]
+	else:
+		if "SENT_PRODUCTION_LOG_LEVEL" not in os.environ:
+			log_level = logging.DEBUG
+		else:
+			level = os.environ["SENT_PRODUCTION_LOG_LEVEL"]
+			log_level = LOG_LEVELS[level]
 
 	logger.setLevel(log_level)
