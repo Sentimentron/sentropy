@@ -126,7 +126,7 @@ if __name__ == "__main__":
             domains  TINYINT(1)
         );""" % (q.id,)
     logging.debug(sql)
-    session.execute(sql, q.id)
+    session.execute(sql)
 
     #
     # Article domain resolution
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     assert using_domains or using_keywords
     documents = set([])
 
-    for id, in session.execute("SELECT doc_id FROM query_%d_articles", q.id):
+    for id, in session.execute("SELECT doc_id FROM query_%d_articles" % (q.id, )):
         documents.add(id)
     logging.info("Query(%d): final document set contains %d elements", q.id, len(documents))
 
