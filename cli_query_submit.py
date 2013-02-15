@@ -144,12 +144,12 @@ if __name__ == "__main__":
     # Identify documents containing the given keywords 
     documents_keywords = set([])
     if raw_keyword_count > 1:
-        for id1, id2 in itertools.combinations(keywords, 2):
+        for key1, key2 in itertools.combinations(keywords, 2):
             sql = """INSERT INTO query_%d_articles 
             SELECT article_id, id, NULL, NULL, NULL, 1, 0 
             FROM documents JOIN articles ON article_id = articles.id 
             WHERE id IN (SELECT doc_id FROM keyword_adjacencies WHERE key1 = %d AND key2= %d)
-            ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, id1, id2)
+            ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, key1.id, key2.id)
             logging.debug(sql);
             session.execute(sql);
     else:
