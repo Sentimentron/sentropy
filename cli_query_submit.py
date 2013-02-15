@@ -259,6 +259,10 @@ if __name__ == "__main__":
         FROM keyword_incidences JOIN query_%d_keywords ON keyword_incidences.keyword_id = query_%d_keywords.id) p 
         SET relevant = 1 WHERE query_%d_phrases.id = p.phrase_id""" % (q.id, q.id, q.id, q.id)
 
+    sql = """INSERT INTO query_%d_phrases SELECT DISTINCT phrase_id, NULL, NULL, NULL, NULL
+        FROM keyword_incidences JOIN query_%d_keywords ON keyword_incidences.keyword_id = query_%d_keywords.id 
+        ON DUPLICATE KEY UPDATE relevant = 1"""
+
     logging.debug(sql)
     session.execute(sql)
 
