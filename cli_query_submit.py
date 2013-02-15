@@ -124,15 +124,20 @@ if __name__ == "__main__":
             date_crawled DATE,
             keywords TINYINT(1),
             domains  TINYINT(1)
-        );"""
-    session.execute(sql, q.id);
+        );""" % (q.id,)
+    logging.debug(sql)
+    session.execute(sql, q.id)
 
     #
     # Article domain resolution
     documents_domains = set([]);
     for d in domains:
-        sql = "INSERT INTO query_%d_articles SELECT article_id, id, NULL, NULL, NULL, 0, 1 FROM documents JOIN articles ON article_id = articles.id WHERE articles.domain_id = %d"
-        session.execute(sql, q.id, d.id);
+        sql = """INSERT INTO query_%d_articles 
+        SELECT article_id, id, NULL, NULL, NULL, 0, 1 
+        FROM documents JOIN articles ON article_id = articles.id 
+        WHERE articles.domain_id = %d""" % (q.id, d.id)
+        logging.debug(sql)
+        session.execute(sql)
     logging.info("Query(%d): retrieved domain relevant documents", q.id, len(documents_domains))
     
     #
@@ -144,23 +149,25 @@ if __name__ == "__main__":
             SELECT article_id, id, NULL, NULL, NULL, 1, 0 
             FROM documents JOIN articles ON article_id = articles.id 
             WHERE id IN (SELECT doc_id FROM keyword_adjacencies WHERE key1 = %d AND key2= %d)
-            ON DUPLICATE KEY UPDATE keywords = 1"""
-            session.execute(sql, q.id, id1, ide2)
+            ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, id1, id2)
+            logging.debug(sql);
+            session.execute(sql);
     else:
         for keyword in keywords:
             sql = """INSERT INTO query_%d_articles 
             SELECT article_id, id, NULL, NULL, NULL, 1, 0 
             FROM documents JOIN articles ON article_id = articles.id 
             WHERE id IN (SELECT doc_id FROM keyword_adjacencies WHERE key1 = %d OR key2= %d)
-            ON DUPLICATE KEY UPDATE keywords = 1"""
-            session.execute(sql, q.id, keyword, keyword)
+            ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, keyword, keyword)
+            logging.debug(sql)
+            session.execute(sql)
     logging.info("Query(%d): retrieved %d documents relevant to a keyword", q.id, len(documents_keywords))
 
     #
     # Final article set resolution 
     assert using_domains or using_keywords
     documents = set([])
-    
+
     for id, in session.execute("SELECT doc_id FROM query_%d_articles", q.id):
         documents.add(id)
     logging.info("Query(%d): final document set contains %d elements", q.id, len(documents))
