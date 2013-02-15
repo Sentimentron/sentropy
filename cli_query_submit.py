@@ -166,7 +166,7 @@ if __name__ == "__main__":
     date_methods = Counter()
     for document in documents:
         dates = {'certain': set([]), 'uncertain': set([])}
-        for certain_date in document.certain_dates:
+        for certain_date in document.certain_dates: 
             dates['certain'].add((certain_date.position, prepare_date(certain_date.date)))
         for uncertain_date in document.uncertain_dates:
             dates['uncertain'].add((uncertain_date.position, prepare_date(uncertain_date.date)))
@@ -175,13 +175,13 @@ if __name__ == "__main__":
         dates['uncertain'] = compute_likely_date(dates['uncertain'], False)
 
         if dates["certain"] is not None:
-            likely_dates[document.id] = dates["certain"]
+            likely_dates[document.id] = ("Certain", dates["certain"])
             date_methods.update(["Certain"])
         elif dates["uncertain"] is not None:
-            likely_dates[document.id] = dates["uncertain"]
+            likely_dates[document.id] = ("Uncertain", dates["uncertain"])
             date_methods.update(["Uncertain"])
         else:
-            likely_dates[document.id] = prepare_date(document.parent.crawled.date())
+            likely_dates[document.id] = ("Crawled", prepare_date(document.parent.crawled.date()))
             date_methods.update(["Crawled"])
 
         logging.info("Query(%d): resolved dates (Certain: %d, Uncertain: %d, Crawled %d)", q.id,\
@@ -192,7 +192,10 @@ if __name__ == "__main__":
     def generate_summary(documents, likely_dates, keywords):
 
         # Create result structure
-        ret = {date: [] for date in [likely_dates[i] for i in likely_dates]}
+        ret = {} #{date: [] for method, date in [likely_dates[i] for i in likely_dates]}
+
+        # Just clarify what we're looking for
+        keywords = [k.id for k in keywords]
 
         # Compute properties for each document 
         for doc in documents:
@@ -219,18 +222,23 @@ if __name__ == "__main__":
                 for phrase in sentence.phrases:
                     if phrase.label != "Unknown":
                         phrase_probs.append(phrase.prob)
-                        it = session.query(KeywordIncidence).filter_by(phrase_id = phrase.id).filter(KeywordIncidence.keyword_id._in(keywords))
-                        if it.count() == 0:
-                            continue 
+                        it = [i for i in phrase.keyword_incidences if i.keyword_id in keywords]
+                        if len(it) == 0:
+                            continue
                         if phrase.label == "Positive":
                             relevant_phrase_pos += 1
                         if phrase.label == "Negative":
                             relevant_phrase_neg += 1
 
-            doc_struct["average_sentence_prob"] = mean(doc_struct["average_sentence_prob"])
-            doc_struct["average_phrase_prob"]   = mean(doc_struct["average_phrase_prob"  ])
+            doc_struct["pos_phrases_rel"] = relevant_phrase_pos
+            doc_struct["neg_phrases_rel"] = relevant_phrase_neg 
 
-            # Append to result structure 
+            doc_struct["average_sentence_prob"] = mean(sentence_probs)
+            doc_struct["average_phrase_prob"]   = mean(phrase_probs  )
+
+            # Append to result structure
+            if date not in ret:
+                ret[date] = [] 
             ret[date].append(doc_struct)
 
         return ret
@@ -238,6 +246,7 @@ if __name__ == "__main__":
 
     #
     # General information
+    logging.info("%s: Gathering information...", q);
     info = {#'articles': session.query(Article).count(),
         #'documents': session.query(Document).count(),
         #'keywords' : session.query(Keyword).count(),
@@ -249,15 +258,16 @@ if __name__ == "__main__":
         'domains_returned': len(domains),
         'keywords_returned': len(keywords)
     }
-
+    logging.info("%s: Generating overall summary...", q);
     result = {
         'info': info, 
-        'overview': generate_summary(documents, likely_dates)
+        'overview': generate_summary(documents, likely_dates, keywords)
     }
 
     for domain in domains:
+        logging.info("%s: Generating summary for '%s'...", q, domain)
         subdoc = filter(lambda x: x.parent.domain == domain, documents)
-        result[domain.key] = generate_summary(subdoc, likely_dates)
+        result[domain.key] = generate_summary(subdoc, likely_dates, keywords)
 
     print json.dumps(result, indent=4)
 
