@@ -273,10 +273,7 @@ if __name__ == "__main__":
     def generate_summary(documents, likely_dates, phrase_relevance):
 
         # Create result structure
-        ret = {} #{date: [] for method, date in [likely_dates[i] for i in likely_dates]}
-
-        # Just clarify what we're looking for
-        keywords = [k.id for k in keywords]
+        ret = {} 
 
         # Compute properties for each document 
         for doc in documents:
@@ -322,13 +319,13 @@ if __name__ == "__main__":
     logging.info("%s: Generating overall summary...", q);
     result = {
         'info': info, 
-        'overview': generate_summary(documents, likely_dates, keywords)
+        'overview': generate_summary(documents, likely_dates, document_phrase_relevance)
     }
 
     for domain in domains:
         logging.info("%s: Generating summary for '%s'...", q, domain)
         subdoc = filter(lambda x: x.parent.domain == domain, documents)
-        result[domain.key] = generate_summary(subdoc, likely_dates, keywords)
+        result[domain.key] = generate_summary(subdoc, likely_dates, document_phrase_relevance)
 
     print json.dumps(result, indent=4)
 
