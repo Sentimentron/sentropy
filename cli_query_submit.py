@@ -192,15 +192,9 @@ if __name__ == "__main__":
     #
     # Final article set resolution 
     assert using_domains or using_keywords
-
-    for item in session.execute("SELECT * FROM query_%d_articles" % (q.id,)):
-        logging.debug(item)
     sql = "DELETE FROM query_%d_articles WHERE NOT (domains = %d AND keywords = %d)" % (q.id, int(using_domains), int(using_keywords))
     logging.debug(sql)
     session.execute(sql)
-
-    for item in session.execute("SELECT * FROM query_%d_articles" % (q.id,)):
-        logging.debug(item)
 
     #
     # Load the documents
@@ -246,7 +240,8 @@ if __name__ == "__main__":
         SELECT phrases.id, doc_id, 0, phrases.prob, phrases.label 
         FROM query_%d_articles JOIN sentences ON doc_id = sentences.document
         JOIN phrases ON sentences.id = phrases.sentence
-    """  % (q.id, q.id)
+        WHERE phrases.label <> "Unknown"
+        """  % (q.id, q.id)
     logging.debug(sql)
     session.execute(sql)
 
@@ -261,7 +256,7 @@ if __name__ == "__main__":
 
     sql = """INSERT INTO query_%d_phrases SELECT DISTINCT phrase_id, NULL, NULL, NULL, NULL
         FROM keyword_incidences JOIN query_%d_keywords ON keyword_incidences.keyword_id = query_%d_keywords.id 
-        ON DUPLICATE KEY UPDATE relevant = 1"""
+        ON DUPLICATE KEY UPDATE relevant = 1""" % (q.id, q.id, q.id)
 
     logging.debug(sql)
     session.execute(sql)
@@ -269,21 +264,16 @@ if __name__ == "__main__":
     sql = """SELECT COUNT(*), doc_id, AVG(prob), label FROM query_%d_phrases WHERE relevant = 1 GROUP BY doc_id, label""" % (q.id, )
     logging.debug(sql)
     document_phrase_relevance = {}
-    for count, _id, prob, label, relevance in session.execute(sql):
+    for count, _id, prob, label in session.execute(sql):
         if _id not in document_phrase_relevance:
             document_phrase_relevance[_id] = {'pos': 0, 'neg': 0, 'prob_pos': 0, 'prob_neg': 0}
 
-        record = document_phrase_relevance[_id]
-        record['total'] += count 
-
         if label == "Positive":
-            if relevance == 1:
-                record['pos'] = count 
-                record['prob_pos'] = prob
+            record['pos'] = count 
+            record['prob_pos'] = prob
         elif label == "Negative":
-            if relevance == 1:
-                record['neg'] = count 
-                record['prob_neg'] = prob 
+            record['neg'] = count 
+            record['prob_neg'] = prob 
 
     def generate_summary(documents, likely_dates, phrase_relevance):
 
