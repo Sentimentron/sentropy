@@ -139,7 +139,7 @@ if __name__ == "__main__":
     logging.debug(sql)
     session.execute(sql)
 
-    sql = """CREATE TEMPORARY TABLE ENGINE=MEMORY query_%d_keywords (
+    sql = """CREATE TEMPORARY TABLE query_%d_keywords (
             id INTEGER PRIMARY KEY 
     ) ENGINE=MEMORY""" % (q.id,)
     logging.debug(sql)
