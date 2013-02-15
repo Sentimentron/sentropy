@@ -158,7 +158,7 @@ if __name__ == "__main__":
             SELECT article_id, id, NULL, NULL, NULL, 1, 0 
             FROM documents JOIN articles ON article_id = articles.id 
             WHERE id IN (SELECT doc_id FROM keyword_adjacencies WHERE key1 = %d OR key2= %d)
-            ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, keyword, keyword)
+            ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, keyword.id, keyword.id)
             logging.debug(sql)
             session.execute(sql)
     logging.info("Query(%d): retrieved %d documents relevant to a keyword", q.id, len(documents_keywords))
