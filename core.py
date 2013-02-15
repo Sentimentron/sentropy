@@ -29,7 +29,7 @@ def get_database_engine_string():
 
 	return "%s://%s:%s@%s/%s" % (DB_PROT, user, pswd, host, DB_NAME)
 
-def configure_logging(prefix='sentropy'):
+def configure_logging(level=None):
 
 	if not os.path.exists('/var/log/sentropy'):
 		raise Exception("/var/log/sentropy needs to exist!")
@@ -44,6 +44,9 @@ def configure_logging(prefix='sentropy'):
 		log_level = logging.DEBUG
 	else:
 		level = os.environ["SENT_PRODUCTION_LOG_LEVEL"]
+		log_level = LOG_LEVELS[level]
+	
+	if level is not None:
 		log_level = LOG_LEVELS[level]
 
 	logger.setLevel(log_level)
