@@ -193,13 +193,13 @@ if __name__ == "__main__":
     # Final article set resolution 
     assert using_domains or using_keywords
 
-    for item in cur.execute("SELECT * FROM query_%d_articles" % (q.id,)):
+    for item in session.execute("SELECT * FROM query_%d_articles" % (q.id,)):
         logging.debug(item)
-    sql = "DELETE FROM query_%d_articles WHERE NOT (keywords = %d AND domains = %d)" % (q.id, int(using_domains), int(using_keywords))
+    sql = "DELETE FROM query_%d_articles WHERE NOT (domains = %d AND keywords = %d)" % (q.id, int(using_domains), int(using_keywords))
     logging.debug(sql)
     session.execute(sql)
 
-    for item in cur.execute("SELECT * FROM query_%d_articles" % (q.id,)):
+    for item in session.execute("SELECT * FROM query_%d_articles" % (q.id,)):
         logging.debug(item)
 
     #
