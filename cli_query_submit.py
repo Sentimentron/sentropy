@@ -135,13 +135,13 @@ if __name__ == "__main__":
             date_crawled DATE,
             keywords TINYINT(1),
             domains  TINYINT(1)
-        );""" % (q.id,)
+        ) ENGINE=MEMORY;""" % (q.id,)
     logging.debug(sql)
     session.execute(sql)
 
-    sql = """CREATE TEMPORARY TABLE query_%d_keywords (
+    sql = """CREATE TEMPORARY TABLE ENGINE=MEMORY query_%d_keywords (
             id INTEGER PRIMARY KEY 
-    )""" % (q.id,)
+    ) ENGINE=MEMORY""" % (q.id,)
     logging.debug(sql)
     session.execute(sql)
 
@@ -238,7 +238,7 @@ if __name__ == "__main__":
             relevant TINYINT(1),
             prob FLOAT,
             label enum('Positive','Unknown','Negative')
-        )""" % (q.id, )
+        ) ENGINE=MEMORY """ % (q.id, )
     logging.debug(sql)
     session.execute(sql)
 
