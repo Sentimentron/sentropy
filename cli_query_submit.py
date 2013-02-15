@@ -140,7 +140,7 @@ if __name__ == "__main__":
     session.execute(sql)
 
     sql = """CREATE TEMPORARY TABLE query_%d_keywords (
-            id INTEGER PRIMARY KEY, 
+            id INTEGER PRIMARY KEY 
     )""" % (q.id,)
     logging.debug(sql)
     session.execute(sql)
@@ -186,14 +186,14 @@ if __name__ == "__main__":
     # Keyword housekeeping
     for keyword in keywords: 
         _id = keyword.id 
-        sql = "INSERT INTO query_%d_keywords VALUES (%d)" % (_id,)
+        sql = "INSERT INTO query_%d_keywords VALUES (%d)" % (q.id, _id)
         session.execute(sql)
 
     #
     # Final article set resolution 
     assert using_domains or using_keywords
 
-    sql = "DELETE FROM query_%d_articles WHERE keywords <> %d AND articles <> %d" % (q.id, int(using_domains), int(using_keywords))
+    sql = "DELETE FROM query_%d_articles WHERE keywords <> %d AND domains <> %d" % (q.id, int(using_domains), int(using_keywords))
     logging.debug(sql)
     session.execute(sql)
 
@@ -207,7 +207,7 @@ if __name__ == "__main__":
     #
     # Date resolution 
     likely_dates = {}
-    sql = "SELECT articles.id, articles.date_crawled FROM query_%d_articles JOIN articles ON query_%d_articles.id = articles.id" % (q.id, q.id)
+    sql = "SELECT articles.id, articles.crawled FROM query_%d_articles JOIN articles ON query_%d_articles.id = articles.id" % (q.id, q.id)
     logging.debug(sql)
     for _id, date_crawled in session.execute(sql):
         likely_dates[_id] = ("Crawled", prepare_date(date_crawled))
@@ -238,8 +238,8 @@ if __name__ == "__main__":
     session.execute(sql)
 
     sql = """INSERT INTO query_%d_phrases 
-        SELECT phrases.id, doc_id, NULL, 0, phrases.prob, phrases.label 
-        FROM query_%d_articles JOIN sentences ON doc_id = sentences.doc_id
+        SELECT phrases.id, doc_id, 0, phrases.prob, phrases.label 
+        FROM query_%d_articles JOIN sentences ON doc_id = sentences.document
         JOIN phrases ON sentences.id = phrases.sentence
     """  % (q.id, q.id)
     logging.debug(sql)
@@ -251,10 +251,10 @@ if __name__ == "__main__":
     logging.debug(sql)
     session.execute(sql)
 
-    sql = """SELECT COUNT(*), doc_id, AVERAGE(prob), label FROM query_%d_phrases WHERE relevant = 1 GROUP BY doc_id, label""" % (q.id, )
+    sql = """SELECT COUNT(*), doc_id, AVG(prob), label FROM query_%d_phrases WHERE relevant = 1 GROUP BY doc_id, label""" % (q.id, )
     logging.debug(sql)
     document_phrase_relevance = {}
-    for count, _id, prob, label, relevance in sesion.execute(sql):
+    for count, _id, prob, label, relevance in session.execute(sql):
         if _id not in document_phrase_relevance:
             document_phrase_relevance[_id] = {'pos': 0, 'neg': 0, 'prob_pos': 0, 'prob_neg': 0}
 
