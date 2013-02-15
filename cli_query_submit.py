@@ -60,7 +60,7 @@ def compute_likely_date(date_recs, certain = False):
 
 if __name__ == "__main__":
 
-    core.configure_logging()
+    core.configure_logging("debug")
 
     #
     # Argument processing
@@ -138,7 +138,7 @@ if __name__ == "__main__":
         WHERE articles.domain_id = %d""" % (q.id, d.id)
         logging.debug(sql)
         session.execute(sql)
-    logging.info("Query(%d): retrieved domain relevant documents", q.id, len(documents_domains))
+    logging.info("Query(%d): retrieved domain relevant documents", q.id)
     
     #
     # Identify documents containing the given keywords 
@@ -161,7 +161,7 @@ if __name__ == "__main__":
             ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, keyword.id, keyword.id)
             logging.debug(sql)
             session.execute(sql)
-    logging.info("Query(%d): retrieved %d documents relevant to a keyword", q.id, len(documents_keywords))
+    logging.info("Query(%d): retrieved %d documents relevant to a keyword", q.id)
 
     #
     # Final article set resolution 
