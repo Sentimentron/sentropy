@@ -176,7 +176,7 @@ if __name__ == "__main__":
             SELECT articles.id, documents.id, NULL, NULL, NULL, 1, 0 
             FROM keyword_adjacencies JOIN documents ON keyword_adjacencies.doc_id = documents.id
             JOIN articles ON documents.article_id = articles.id
-            WHERE key1_id = %d AND key2_id = %d
+            WHERE key1_id = %d OR key2_id = %d
             ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, keyword.id, keyword.id)
             logging.debug(sql)
             session.execute(sql)
@@ -253,6 +253,12 @@ if __name__ == "__main__":
     sql = """UPDATE query_%d_phrases, keyword_incidences SET query_%d_phrases.relevant = 1 WHERE query_%d_phrases.id IN (
             SELECT phrase_id FROM keyword_incidences JOIN query_%d_keywords ON keyword_incidences.keyword_id = query_%d_keywords.id
         )""" % (q.id, q.id, q.id, q.id, q.id)
+
+    sql = """UPDATE query_%d_phrases, (
+        SELECT DISTINCT phrase_id 
+        FROM keyword_incidences JOIN query_%d_keywords ON keyword_incidences.keyword_id = query_%d_keywords.id) p 
+        SET relevant = 1 WHERE query_%d_phrases.id = p.phrase_id""" % (q.id, q.id, q.id, q.id)
+
     logging.debug(sql)
     session.execute(sql)
 
