@@ -146,7 +146,7 @@ if __name__ == "__main__":
     if raw_keyword_count > 1:
         for key1, key2 in itertools.combinations(keywords, 2):
             sql = """INSERT INTO query_%d_articles 
-            SELECT article_id, id, NULL, NULL, NULL, 1, 0 
+            SELECT documents.article_id, documents.id, NULL, NULL, NULL, 1, 0 
             FROM documents JOIN articles ON article_id = articles.id 
             WHERE id IN (SELECT doc_id FROM keyword_adjacencies WHERE key1 = %d AND key2= %d)
             ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, key1.id, key2.id)
@@ -155,7 +155,7 @@ if __name__ == "__main__":
     else:
         for keyword in keywords:
             sql = """INSERT INTO query_%d_articles 
-            SELECT article_id, id, NULL, NULL, NULL, 1, 0 
+            SELECT documents.article_id, documents.id, NULL, NULL, NULL, 1, 0 
             FROM documents JOIN articles ON article_id = articles.id 
             WHERE id IN (SELECT doc_id FROM keyword_adjacencies WHERE key1 = %d OR key2= %d)
             ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, keyword.id, keyword.id)
