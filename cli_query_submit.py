@@ -116,13 +116,13 @@ if __name__ == "__main__":
 
     #
     # OK, the approach here is to 
-    # 1) Create a temporary table which can hold documents, their article id and their selection criteria
-    # 2) Copy documents with a matching domain into the temporary table 
-    # 3) Copy documents with a matching keyword into the temporary table
-    # 4) Delete records from the temporary table which don't fulfill all of the query criteria
-    # 5) Use the document identifiers to resolve date crawled - our most basic date resolution
-    # 6) Use the document identifiers to identify the most likely certain date - our highest date resolution
-    # 7) For those documents which don't have this, compute an average uncertain date.
+    # 1) Create a temporary table which can hold documents, their article id and their selection criteria [DONE]
+    # 2) Copy documents with a matching domain into the temporary table  [DONE]
+    # 3) Copy documents with a matching keyword into the temporary table [DONE]
+    # 4) Delete records from the temporary table which don't fulfill all of the query criteria [DONE] 
+    # 5) Use the document identifiers to resolve date crawled - our most basic date resolution [DONE]
+    # 6) Use the document identifiers to identify the most likely certain date - our highest date resolution [DONE]
+    # 7) For those documents which don't have this, compute an average uncertain date. [DONE]
     # 8) Create another temporary table which can hold phrases, copy all the phrases in all of the documents into this table 
     # 9) Filter keyword incidences by the keywords we have and join with this temporary table to count how many phrases in each document
     #    are relevant. 
@@ -136,6 +136,12 @@ if __name__ == "__main__":
             keywords TINYINT(1),
             domains  TINYINT(1)
         );""" % (q.id,)
+    logging.debug(sql)
+    session.execute(sql)
+
+    sql = """CREATE TEMPORARY TABLE query_%d_keywords (
+            id INTEGER PRIMARY KEY, 
+    )""" % (q.id,)
     logging.debug(sql)
     session.execute(sql)
 
@@ -177,62 +183,94 @@ if __name__ == "__main__":
     logging.info("Query(%d): retrieved keyword relevant documents", q.id)
 
     #
+    # Keyword housekeeping
+    for keyword in keywords: 
+        _id = keyword.id 
+        sql = "INSERT INTO query_%d_keywords VALUES (%d)" % (_id,)
+        session.execute(sql)
+
+    #
     # Final article set resolution 
     assert using_domains or using_keywords
 
-    sql = "DELETE FROM query_%d_articles WHERE keywords <> %d AND articles <> %d" % (int(using_domains), int(using_keywords))
+    sql = "DELETE FROM query_%d_articles WHERE keywords <> %d AND articles <> %d" % (q.id, int(using_domains), int(using_keywords))
+    logging.debug(sql)
     session.execute(sql)
+
+    #
+    # Load the documents
+    documents = set([])
+    sql = "SELECT doc_id FROM query_%d_articles" % (q.id, )
+    for _id, in session.execute(sql):
+        documents.add(session.query(Document).get(_id))
 
     #
     # Date resolution 
     likely_dates = {}
     sql = "SELECT articles.id, articles.date_crawled FROM query_%d_articles JOIN articles ON query_%d_articles.id = articles.id" % (q.id, q.id)
+    logging.debug(sql)
     for _id, date_crawled in session.execute(sql):
         likely_dates[_id] = ("Crawled", prepare_date(date_crawled))
 
-    sql = """SELECT `date`, doc_id FROM certain_dates GROUP BY doc_id ORDER BY MIN(ABS(position-346)) ASC 
-        JOIN (SELECT position, MIN(ABS(position-346))
-        """
+    sql = """SELECT doc_id, `date` 
+    FROM uncertain_dates NATURAL JOIN query_%d_articles 
+    WHERE YEAR(date) > 2000 AND YEAR(date) <= 2008
+    GROUP BY doc_id ORDER BY ABS(position - 307)""" % (q.id, )
+    logging.debug(sql)
+    for _id, date_crawled in session.execute(sql):
+        likely_dates[_id] = ("Uncertain", prepare_date(date_crawled))
 
-    sql = "UPDATE query_%d_articles, certain_dates SET query_%d_articles.date_certain "
-
-
-    documents = set([])
-    for id, in session.execute("SELECT doc_id FROM query_%d_articles" % (q.id, )):
-        documents.add(session.query(Document).get(id))
-
-    logging.info("Query(%d): final document set contains %d elements", q.id, len(documents))
+    sql = """SELECT doc_id, date FROM certain_dates NATURAL JOIN query_%d_articles GROUP BY doc_id ORDER BY ABS(position-346)""" % (q.id)
+    logging.debug(sql)
+    for _id, date_crawled in session.execute(sql):
+        likely_dates[_id] = ("Certain", prepare_date(date_crawled))
 
     #
-    # Date resolution 
-    likely_dates = {}
-    date_methods = Counter()
-    for document in documents:
-        dates = {'certain': set([]), 'uncertain': set([])}
-        for certain_date in document.certain_dates: 
-            dates['certain'].add((certain_date.position, prepare_date(certain_date.date)))
-        for uncertain_date in document.uncertain_dates:
-            dates['uncertain'].add((uncertain_date.position, prepare_date(uncertain_date.date)))
+    # Phrase resolution 
+    sql = """CREATE TEMPORARY TABLE query_%d_phrases (
+            id INTEGER PRIMARY KEY,
+            doc_id INTEGER,
+            relevant TINYINT(1),
+            prob FLOAT,
+            label enum('Positive','Unknown','Negative')
+        )""" % (q.id, )
+    logging.debug(sql)
+    session.execute(sql)
 
-        dates['certain'] = compute_likely_date(dates['certain'])
-        dates['uncertain'] = compute_likely_date(dates['uncertain'], False)
+    sql = """INSERT INTO query_%d_phrases 
+        SELECT phrases.id, doc_id, NULL, 0, phrases.prob, phrases.label 
+        FROM query_%d_articles JOIN sentences ON doc_id = sentences.doc_id
+        JOIN phrases ON sentences.id = phrases.sentence
+    """  % (q.id, q.id)
+    logging.debug(sql)
+    session.execute(sql)
 
-        if dates["certain"] is not None:
-            likely_dates[document.id] = ("Certain", dates["certain"])
-            date_methods.update(["Certain"])
-        elif dates["uncertain"] is not None:
-            likely_dates[document.id] = ("Uncertain", dates["uncertain"])
-            date_methods.update(["Uncertain"])
-        else:
-            likely_dates[document.id] = ("Crawled", prepare_date(document.parent.crawled.date()))
-            date_methods.update(["Crawled"])
+    sql = """UPDATE query_%d_phrases, keyword_incidences SET query_%d_phrases.relevant = 1 WHERE query_%d_phrases.id IN (
+            SELECT phrase_id FROM keyword_incidences JOIN query_%d_keywords ON keyword_incidences.keyword_id = query_%d_keywords.id
+        )""" % (q.id, q.id, q.id, q.id, q.id)
+    logging.debug(sql)
+    session.execute(sql)
 
-        logging.info("Query(%d): resolved dates (Certain: %d, Uncertain: %d, Crawled %d)", q.id,\
-            date_methods["Certain"], date_methods["Uncertain"], date_methods["Crawled"])
+    sql = """SELECT COUNT(*), doc_id, AVERAGE(prob), label FROM query_%d_phrases WHERE relevant = 1 GROUP BY doc_id, label""" % (q.id, )
+    logging.debug(sql)
+    document_phrase_relevance = {}
+    for count, _id, prob, label, relevance in sesion.execute(sql):
+        if _id not in document_phrase_relevance:
+            document_phrase_relevance[_id] = {'pos': 0, 'neg': 0, 'prob_pos': 0, 'prob_neg': 0}
 
-    logging.info("Finished resolving dates.")
+        record = document_phrase_relevance[_id]
+        record['total'] += count 
 
-    def generate_summary(documents, likely_dates, keywords):
+        if label == "Positive":
+            if relevance == 1:
+                record['pos'] = count 
+                record['prob_pos'] = prob
+        elif label == "Negative":
+            if relevance == 1:
+                record['neg'] = count 
+                record['prob_neg'] = prob 
+
+    def generate_summary(documents, likely_dates, phrase_relevance):
 
         # Create result structure
         ret = {} #{date: [] for method, date in [likely_dates[i] for i in likely_dates]}
@@ -255,29 +293,9 @@ if __name__ == "__main__":
             doc_struct["pos_sentences"] = doc.pos_sentences;
             doc_struct["neg_sentences"] = doc.neg_sentences;
 
-            # Compute average probabilities and the number of relevant phrases
-            sentence_probs = [] 
-            phrase_probs   = []
-            relevant_phrase_pos, relevant_phrase_neg = 0, 0
-            for sentence in doc.sentences:
-                if sentence.label != "Unknown":
-                    sentence_probs.append(sentence.prob) # TODO: need to verify this field 
-                for phrase in sentence.phrases:
-                    if phrase.label != "Unknown":
-                        phrase_probs.append(phrase.prob)
-                        it = [i for i in phrase.keyword_incidences if i.keyword_id in keywords]
-                        if len(it) == 0:
-                            continue
-                        if phrase.label == "Positive":
-                            relevant_phrase_pos += 1
-                        if phrase.label == "Negative":
-                            relevant_phrase_neg += 1
-
-            doc_struct["pos_phrases_rel"] = relevant_phrase_pos
-            doc_struct["neg_phrases_rel"] = relevant_phrase_neg 
-
-            doc_struct["average_sentence_prob"] = mean(sentence_probs)
-            doc_struct["average_phrase_prob"]   = mean(phrase_probs  )
+            doc_struct["pos_phrases_rel"] = phrase_relevance[id]['pos']
+            doc_struct["neg_phrases_rel"] = phrase_relevance[id]['neg']
+            doc_struct["average_phrase_prob"] = 0.5(phrase_relevance[id]['prob_pos'] + phrase_relevance[id]['prob_neg'])
 
             # Append to result structure
             if date not in ret:
