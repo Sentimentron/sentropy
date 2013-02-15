@@ -53,6 +53,10 @@ def worker_func(article_id):
         logging.error("Article doesn't exist: shouldn't be possible. %d", article_id)
         return article_id 
 
+    if article.headers is None or article.content is None:
+        logging.error("Article %d has NULL headers and/or content. This is possible, but shouldn't happen often", article_id)
+        return article_id
+
     status = cp.process_record((article.crawl_id, (article.headers, article.content, article.url, \
         article.date_crawled, article.content_type)))
 
@@ -62,6 +66,8 @@ def worker_func(article_id):
         record = RawArticleResult(article_id, "Processed")
         result_link = RawArticleResultLink(article_id, status)
         session.add(result_link)
+        article.headers = None
+        article.content = None 
 
     session.add(record)
     session.commit()
