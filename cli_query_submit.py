@@ -193,7 +193,7 @@ if __name__ == "__main__":
     # Final article set resolution 
     assert using_domains or using_keywords
 
-    sql = "DELETE FROM query_%d_articles WHERE keywords <> %d AND domains <> %d" % (q.id, int(using_domains), int(using_keywords))
+    sql = "DELETE FROM query_%d_articles WHERE NOT (keywords = %d AND domains = %d)" % (q.id, int(using_domains), int(using_keywords))
     logging.debug(sql)
     session.execute(sql)
 
@@ -271,6 +271,8 @@ if __name__ == "__main__":
                 record['prob_neg'] = prob 
 
     def generate_summary(documents, likely_dates, phrase_relevance):
+
+        [logging.debug(x) for x in [documents, likely_dates, phrase_relevance]]
 
         # Create result structure
         ret = {} 
