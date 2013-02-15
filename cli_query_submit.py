@@ -176,7 +176,7 @@ if __name__ == "__main__":
             SELECT articles.id, documents.id, NULL, NULL, NULL, 1, 0 
             FROM keyword_adjacencies JOIN documents ON keyword_adjacencies.doc_id = documents.id
             JOIN articles ON documents.article_id = articles.id
-            WHERE key1_id = %d AND key2_id = %d
+            WHERE key1_id = %d OR key2_id = %d
             ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, keyword.id, keyword.id)
             logging.debug(sql)
             session.execute(sql)
