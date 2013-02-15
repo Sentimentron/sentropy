@@ -147,8 +147,8 @@ if __name__ == "__main__":
         for key1, key2 in itertools.combinations(keywords, 2):
             sql = """INSERT INTO query_%d_articles 
             SELECT documents.article_id, documents.id, NULL, NULL, NULL, 1, 0 
-            FROM documents JOIN articles ON article_id = articles.id 
-            WHERE id IN (SELECT doc_id FROM keyword_adjacencies WHERE key1_id = %d AND key2_id = %d)
+            FROM documents JOIN articles ON documents.article_id = articles.id 
+            WHERE documents.id IN (SELECT doc_id FROM keyword_adjacencies WHERE key1_id = %d AND key2_id = %d)
             ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, key1.id, key2.id)
             logging.debug(sql);
             session.execute(sql);
@@ -156,8 +156,8 @@ if __name__ == "__main__":
         for keyword in keywords:
             sql = """INSERT INTO query_%d_articles 
             SELECT documents.article_id, documents.id, NULL, NULL, NULL, 1, 0 
-            FROM documents JOIN articles ON article_id = articles.id 
-            WHERE id IN (SELECT doc_id FROM keyword_adjacencies WHERE key1_id = %d OR key2_id = %d)
+            FROM documents JOIN articles ON documents.article_id = articles.id 
+            WHERE documents.id IN (SELECT doc_id FROM keyword_adjacencies WHERE key1_id = %d OR key2_id = %d)
             ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, keyword.id, keyword.id)
             logging.debug(sql)
             session.execute(sql)
