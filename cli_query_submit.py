@@ -268,6 +268,8 @@ if __name__ == "__main__":
         if _id not in document_phrase_relevance:
             document_phrase_relevance[_id] = {'pos': 0, 'neg': 0, 'prob_pos': 0, 'prob_neg': 0}
 
+        record = document_phrase_relevance[_id]
+
         if label == "Positive":
             record['pos'] = count 
             record['prob_pos'] = prob
