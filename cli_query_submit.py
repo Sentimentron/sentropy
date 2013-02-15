@@ -150,7 +150,7 @@ if __name__ == "__main__":
     documents_domains = set([]);
     for d in domains:
         sql = """INSERT INTO query_%d_articles 
-        SELECT article_id, id, NULL, NULL, NULL, 0, 1 
+        SELECT documents.article_id, documents.id, NULL, NULL, NULL, 0, 1 
         FROM documents JOIN articles ON article_id = articles.id 
         WHERE articles.domain_id = %d""" % (q.id, d.id)
         logging.debug(sql)
@@ -195,8 +195,7 @@ if __name__ == "__main__":
 
     for item in cur.execute("SELECT * FROM query_%d_articles" % (q.id,)):
         logging.debug(item)
-
-    sql = "DELETE FROM query_%d_articles WHERE keywords <> %d AND domains <> %d" % (q.id, int(using_domains), int(using_keywords))
+    sql = "DELETE FROM query_%d_articles WHERE NOT (keywords = %d AND domains = %d)" % (q.id, int(using_domains), int(using_keywords))
     logging.debug(sql)
     session.execute(sql)
 
@@ -277,6 +276,8 @@ if __name__ == "__main__":
                 record['prob_neg'] = prob 
 
     def generate_summary(documents, likely_dates, phrase_relevance):
+
+        [logging.debug(x) for x in [documents, likely_dates, phrase_relevance]]
 
         # Create result structure
         ret = {} 
