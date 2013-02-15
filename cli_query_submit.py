@@ -114,39 +114,55 @@ if __name__ == "__main__":
         domains.update(it)
     logging.info("Query(%d): expanded %d raw domains into %d database domains", q.id, raw_domain_count, len(domains))
 
+    #
+    # Temporary table creation
+    sql = """CREATE TEMPORARY TABLE query_%d_articles (
+            id INTEGER PRIMARY KEY,
+            doc_id INTEGER,
+            date_certain DATE,
+            date_uncertain DATE,
+            date_crawled DATE,
+            keywords TINYINT(1),
+            domains  TINYINT(1)
+        );"""
+    session.execute(sql, q.id);
 
     #
     # Article domain resolution
-    documents_domains = set([])
+    documents_domains = set([]);
     for d in domains:
-        articles_it = session.query(Article).filter_by(domain = d).options(joinedload('documents'))
-        for article in articles_it:
-            documents_domains.update(article.documents)
-    logging.info("Query(%d): retrieved %d documents relevant to a domain", q.id, len(documents_domains))
+        sql = "INSERT INTO query_%d_articles SELECT article_id, id, NULL, NULL, NULL, 0, 1 FROM documents JOIN articles ON article_id = articles.id WHERE articles.domain_id = %d"
+        session.execute(sql, q.id, d.id);
+    logging.info("Query(%d): retrieved domain relevant documents", q.id, len(documents_domains))
     
     #
     # Identify documents containing the given keywords 
     documents_keywords = set([])
     if raw_keyword_count > 1:
         for id1, id2 in itertools.combinations(keywords, 2):
-            it = session.query(KeywordAdjacency).filter_by(key1 = id1).filter_by(key2 = id2).options(joinedload('document'))
-            documents_keywords.update([i.document for i in it])
+            sql = """INSERT INTO query_%d_articles 
+            SELECT article_id, id, NULL, NULL, NULL, 1, 0 
+            FROM documents JOIN articles ON article_id = articles.id 
+            WHERE id IN (SELECT doc_id FROM keyword_adjacencies WHERE key1 = %d AND key2= %d)
+            ON DUPLICATE KEY UPDATE keywords = 1"""
+            session.execute(sql, q.id, id1, ide2)
     else:
         for keyword in keywords:
-            it = session.query(KeywordAdjacency).filter((KeywordAdjacency.key1 == keyword) | (KeywordAdjacency.key2 == keyword)).options(joinedload('document'))
-            documents_keywords.update([i.document for i in it])
+            sql = """INSERT INTO query_%d_articles 
+            SELECT article_id, id, NULL, NULL, NULL, 1, 0 
+            FROM documents JOIN articles ON article_id = articles.id 
+            WHERE id IN (SELECT doc_id FROM keyword_adjacencies WHERE key1 = %d OR key2= %d)
+            ON DUPLICATE KEY UPDATE keywords = 1"""
+            session.execute(sql, q.id, keyword, keyword)
     logging.info("Query(%d): retrieved %d documents relevant to a keyword", q.id, len(documents_keywords))
 
     #
     # Final article set resolution 
     assert using_domains or using_keywords
     documents = set([])
-    if using_domains and using_keywords:
-        documents = documents_keywords & documents_domains
-    elif using_domains:
-        documents = documents_domains 
-    elif using_keywords:
-        documents = documents_keywords
+    
+    for id, in session.execute("SELECT doc_id FROM query_%d_articles", q.id):
+        documents.add(id)
     logging.info("Query(%d): final document set contains %d elements", q.id, len(documents))
 
     #
