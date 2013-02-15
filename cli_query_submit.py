@@ -150,7 +150,7 @@ if __name__ == "__main__":
     documents_domains = set([]);
     for d in domains:
         sql = """INSERT INTO query_%d_articles 
-        SELECT article_id, id, NULL, NULL, NULL, 0, 1 
+        SELECT documents.article_id, documents.id, NULL, NULL, NULL, 0, 1 
         FROM documents JOIN articles ON article_id = articles.id 
         WHERE articles.domain_id = %d""" % (q.id, d.id)
         logging.debug(sql)
