@@ -146,18 +146,20 @@ if __name__ == "__main__":
     if raw_keyword_count > 1:
         for key1, key2 in itertools.combinations(keywords, 2):
             sql = """INSERT INTO query_%d_articles 
-            SELECT documents.article_id, documents.id, NULL, NULL, NULL, 1, 0 
-            FROM documents JOIN articles ON documents.article_id = articles.id 
-            WHERE documents.id IN (SELECT doc_id FROM keyword_adjacencies WHERE key1_id = %d AND key2_id = %d)
-            ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, key1.id, key2.id)
+            SELECT articles.id, documents.id, NULL, NULL, NULL, 1, 0 
+            FROM keyword_adjacencies JOIN documents ON keyword_adjacencies.doc_id = documents.id
+            JOIN articles ON documents.article_id = articles.id
+            WHERE key1_id = %d AND key2_id = %d
+            ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, key1_id, key2_id)
             logging.debug(sql);
             session.execute(sql);
     else:
         for keyword in keywords:
             sql = """INSERT INTO query_%d_articles 
-            SELECT documents.article_id, documents.id, NULL, NULL, NULL, 1, 0 
-            FROM documents JOIN articles ON documents.article_id = articles.id 
-            WHERE documents.id IN (SELECT doc_id FROM keyword_adjacencies WHERE key1_id = %d OR key2_id = %d)
+            SELECT articles.id, documents.id, NULL, NULL, NULL, 1, 0 
+            FROM keyword_adjacencies JOIN documents ON keyword_adjacencies.doc_id = documents.id
+            JOIN articles ON documents.article_id = articles.id
+            WHERE key1_id = %d AND key2_id = %d
             ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, keyword.id, keyword.id)
             logging.debug(sql)
             session.execute(sql)
