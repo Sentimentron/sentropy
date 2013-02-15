@@ -22,6 +22,13 @@ from backend.db import Keyword, Domain, KeywordAdjacency, Article, Document, Key
 
 from collections import Counter
 
+def mean(items):
+    if len(items)  == 0:
+        return 0
+    if sum(items) == 0:
+        return 0
+    return len(items)/(1.0*sum(items))
+
 def prepare_date(input_date):
     if type(input_date) is types.TupleType:
         return time.mktime(input_date) * 1000
@@ -80,6 +87,7 @@ if __name__ == "__main__":
         session.commit()
     assert q.id is not None 
     logging.info("Resolving query id %d with text '%s'", q.id, q.text)
+
     #
     # Query keyword resolution
     keywords = set([])
@@ -115,6 +123,7 @@ if __name__ == "__main__":
         for article in articles_it:
             documents_domains.update(article.documents)
     logging.info("Query(%d): retrieved %d documents relevant to a domain", q.id, len(documents_domains))
+    
     #
     # Identify documents containing the given keywords 
     documents_keywords = set([])
@@ -146,8 +155,10 @@ if __name__ == "__main__":
     documents    = set([])
 
     for _id in document_ids:
-        document = session.query(Document).options(joinedload('*'), joinedload('sentences.phrases'), joinedload('sentences.phrases.keyword_incidences'), joinedload('sentences.phrases.keyword_incidences')).get(_id)
+        document = session.query(Document).get(_id)
         documents.add(document)
+
+    logging.info("Finished loading final document set.")
 
     #
     # Date resolution 
@@ -176,51 +187,53 @@ if __name__ == "__main__":
         logging.info("Query(%d): resolved dates (Certain: %d, Uncertain: %d, Crawled %d)", q.id,\
             date_methods["Certain"], date_methods["Uncertain"], date_methods["Crawled"])
 
-    def generate_summary(documents, likely_dates):
+    logging.info("Finished resolving dates.")
 
-        #
-        # Article volume 
-        document_volume = Counter([likely_dates[document.id] for document in documents])
+    def generate_summary(documents, likely_dates, keywords):
 
-        #
-        # Sentiment volume (document level)
-        doc_sentiment_pos = Counter([likely_dates[document.id] for document in documents if document.label == "Positive"])
-        doc_sentiment_neg = Counter([likely_dates[document.id] for document in documents if document.label == "Negative"])
+        # Create result structure
+        ret = {date: [] for date in [likely_dates[i] for i in likely_dates]}
 
-        #
-        # Document properties computation
-        #properties = dict([(likely_dates[document.id], document) for document in documents])
-        properties = {}
-        for document in documents:
-            date = likely_dates[document.id]
-            if date not in properties:
-                properties[date] = set([])
-            properties[date].add(document)
+        # Compute properties for each document 
+        for doc in documents:
+            doc_struct = {key : None for key in ["pos_phrases", "pos_sentences", "neg_phrases", "neg_sentences", 
+                "pos_phrases_rel", "neg_phrases_rel", "id", "date_method", "average_sentence_prob", "average_phrase_prob"]}
+            id = doc.id 
+            doc_struct["id"] = id; 
+            # Check the date method
+            method, date = likely_dates[id]
+            doc_struct["date_method"] = method; 
 
+            doc_struct["pos_phrases"] = doc.pos_phrases; 
+            doc_struct["neg_phrases"] = doc.neg_phrases;
+            doc_struct["pos_sentences"] = doc.pos_sentences;
+            doc_struct["neg_sentences"] = doc.neg_sentences;
 
-        def mean(items):
-            if len(items)  == 0:
-                return 0
-            if sum(items) == 0:
-                return 0
-            return len(items)/(1.0*sum(items))
+            # Compute average probabilities and the number of relevant phrases
+            sentence_probs = [] 
+            phrase_probs   = []
+            relevant_phrase_pos, relevant_phrase_neg = 0, 0
+            for sentence in doc.sentences:
+                if sentence.label != "Unknown":
+                    sentence_probs.append(sentence.prob) # TODO: need to verify this field 
+                for phrase in sentence.phrases:
+                    if phrase.label != "Unknown":
+                        phrase_probs.append(phrase.prob)
+                        it = session.query(KeywordIncidence).filter_by(phrase_id = phrase.id).filter(KeywordIncidence.keyword_id._in(keywords))
+                        if it.count() == 0:
+                            continue 
+                        if phrase.label == "Positive":
+                            relevant_phrase_pos += 1
+                        if phrase.label == "Negative":
+                            relevant_phrase_neg += 1
 
-        pos_phrases   = {date : mean([d.pos_phrases for d in properties[date]]) for date in properties}
-        neg_phrases   = {date : mean([d.neg_phrases for d in properties[date]]) for date in properties}
-        pos_sentences = {date : mean([d.pos_sentences for d in properties[date]]) for date in properties}
-        neg_sentences = {date : mean([d.neg_sentences for d in properties[date]]) for date in properties}
+            doc_struct["average_sentence_prob"] = mean(doc_struct["average_sentence_prob"])
+            doc_struct["average_phrase_prob"]   = mean(doc_struct["average_phrase_prob"  ])
 
-        # Zip into a results dict
-        return {
-            'info' : {'documents_returned': len(documents)},
-            'document_volume': [[date, document_volume[date]] for date in document_volume],
-            'document_sentiment_pos': [[date, doc_sentiment_pos[date]] for date in doc_sentiment_pos],
-            'document_sentiment_neg': [[date, doc_sentiment_neg[date]] for date in doc_sentiment_neg],
-            'pos_phrases': [[date, pos_phrases[date]] for date in pos_phrases],
-            'neg_phrases': [[date, neg_phrases[date]] for date in neg_phrases],
-            'pos_sentences' : [[date, pos_sentences[date]] for date in pos_sentences],
-            'neg_sentences' : [[date, neg_sentences[date]] for date in neg_sentences]
-        }
+            # Append to result structure 
+            ret[date].append(doc_struct)
+
+        return ret
 
 
     #
@@ -232,6 +245,7 @@ if __name__ == "__main__":
         #'keyword_bigrams': session.query(KeywordAdjacency).count(),
         #'sentences': session.query(Sentence).count(),
         #'phrases': session.query(Phrase).count(),
+        "query_text": q.text,
         'domains_returned': len(domains),
         'keywords_returned': len(keywords)
     }
@@ -244,8 +258,6 @@ if __name__ == "__main__":
     for domain in domains:
         subdoc = filter(lambda x: x.parent.domain == domain, documents)
         result[domain.key] = generate_summary(subdoc, likely_dates)
-
-
 
     print json.dumps(result, indent=4)
 
