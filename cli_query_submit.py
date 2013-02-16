@@ -374,7 +374,8 @@ if __name__ == "__main__":
     logging.info("%s: Generating overall summary...", q);
     result = {
         'info': info, 
-        'overview': generate_summary(documents, likely_dates, document_phrase_relevance)
+        'overview': generate_summary(documents, likely_dates, document_phrase_relevance),
+        'details': {}
     }
 
     for domain in domains:
@@ -383,7 +384,7 @@ if __name__ == "__main__":
             continue 
         subdoc = document_domain_mapping[_id]
         logging.info("%s: Generating summary for '%s'...", q, domain)
-        result[domain.key] = generate_summary(subdoc, likely_dates, document_phrase_relevance)
+        result['details'][domain.key] = generate_summary(subdoc, likely_dates, document_phrase_relevance)
 
     print json.dumps(result, indent=4)
 
