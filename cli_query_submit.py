@@ -206,7 +206,7 @@ if __name__ == "__main__":
     #
     # Date resolution 
     likely_dates = {}
-    sql = "SELECT articles.doc_id, articles.crawled FROM query_%d_articles JOIN articles ON query_%d_articles.id = articles.id" % (q.id, q.id)
+    sql = "SELECT doc_id, articles.crawled FROM query_%d_articles JOIN articles ON query_%d_articles.id = articles.id" % (q.id, q.id)
     logging.debug(sql)
     for _id, date_crawled in session.execute(sql):
         likely_dates[_id] = ("Crawled", prepare_date(date_crawled))
