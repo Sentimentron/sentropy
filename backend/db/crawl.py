@@ -31,7 +31,7 @@ def annotated_insert(insert, compiler, **kw):
 		logging.debug("INSERT TABLE (IGNORE) %s", insert.table)
 		insert = insert.prefix_with('IGNORE')
 		return compiler.visit_insert(insert, **kw)
-	return compiler.visit_insert(insert.prefix_with('/* foo */'), **kw)
+	return compiler.visit_insert(insert.prefix_with('DELAYED'), **kw)
 	
 class UserQuery(Base):
 
