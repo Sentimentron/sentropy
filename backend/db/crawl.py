@@ -30,9 +30,8 @@ def annotated_insert(insert, compiler, **kw):
 	if str(insert.table) == 'software':
 		logging.debug("INSERT TABLE (IGNORE) %s", insert.table)
 		insert = insert.prefix_with('IGNORE')
-	return compiler.visit_insert(insert, **kw)
-
-class UserQuery(Base):
+		return compiler.visit_insert(insert, **kw)
+	return compiler.visit_insert(insert.prefix_with('DELAYED'), **kw)
 
 	__tablename__ = 'queries'
 
@@ -742,7 +741,12 @@ class Document(Base):
 	def __init__(self, parent, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases, headline=None):
 
 		if not isinstance(parent, Article):
-			raise TypeError(("parent: should be Article", parent, type(parent)))
+			if not isinstance(parent, types.LongType):
+				raise TypeError(("parent: should be Article", parent, type(parent)))
+			else:
+				self.parent_id = parent 
+		else:
+			self.parent = parent 
 
 		self.length = length 
 		self.pos_phrases   = pos_phrases
@@ -760,9 +764,6 @@ class Document(Base):
 			self.label = "Negative"
 		else:
 			raise ValueError(("Invalid label", label))
-
-		self.parent = parent
-
 
 class Article(Base):
 
