@@ -725,6 +725,8 @@ class Document(Base):
 
 	@validates('length')
 	def validate_length(self, key, length):
+		if length is None:
+			raise ValueError("Needs a length")
 		if length == 0:
 			raise ValueError("Needs more length.")
 		return length
