@@ -30,8 +30,7 @@ def annotated_insert(insert, compiler, **kw):
 	if str(insert.table) == 'software':
 		logging.debug("INSERT TABLE (IGNORE) %s", insert.table)
 		insert = insert.prefix_with('IGNORE')
-		return compiler.visit_insert(insert, **kw)
-	return compiler.visit_insert(insert.prefix_with('DELAYED'), **kw)
+	return compiler.visit_insert(insert, **kw)
 	
 class UserQuery(Base):
 
