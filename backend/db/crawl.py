@@ -747,7 +747,7 @@ class Document(Base):
 			if not isinstance(parent, types.LongType):
 				raise TypeError(("parent: should be Article", parent, type(parent)))
 			else:
-				self.parent_id = parent 
+				self.article_id = parent 
 		else:
 			self.parent = parent 
 
