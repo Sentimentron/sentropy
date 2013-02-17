@@ -30,14 +30,9 @@ def mean(items):
     return len(items)/(1.0*sum(items))
 
 def prepare_date(input_date):
-    if type(input_date) is types.TupleType:
-        return time.mktime(input_date) * 1000
-    elif type(input_date) is datetime.datetime:
-        return time.mktime(input_date.date().timetuple()) * 1000
-    elif type(input_date) is datetime.date:
-        return time.mktime(input_date.timetuple()) * 1000
-    else:
-        raise TypeError(type(input_date))
+    start = datetime.datetime(year=1970,month=1,day=1)
+    diff = input_date - start
+    return diff.total_seconds()*1000
 
 def compute_likely_date(date_recs, certain = False):
     ret = None 
@@ -270,15 +265,19 @@ if __name__ == "__main__":
     for _id, date_crawled in session.execute(sql):
         likely_dates[_id] = ("Crawled", prepare_date(date_crawled))
 
-    sql = """SELECT doc_id, `date` 
-    FROM uncertain_dates NATURAL JOIN query_%d_articles 
-    WHERE YEAR(date) > 2000 AND YEAR(date) <= 2008
-    GROUP BY doc_id ORDER BY ABS(position - 307)""" % (q.id, )
+    sql = """SELECT uncertain_dates.doc_id, `date` 
+    FROM uncertain_dates JOIN query_%d_articles ON uncertain_dates.doc_id = query_%d_articles.doc_id
+    WHERE YEAR(date) > 2000 AND YEAR(date) <= 2009
+    GROUP BY doc_id ORDER BY ABS(position - 307)""" % (q.id, q.id)
     logging.debug(sql)
     for _id, date_crawled in session.execute(sql):
         likely_dates[_id] = ("Uncertain", prepare_date(date_crawled))
 
-    sql = """SELECT doc_id, `date` FROM certain_dates NATURAL JOIN query_%d_articles GROUP BY doc_id ORDER BY ABS(position-346)""" % (q.id)
+    sql = """SELECT certain_dates.doc_id, `date` 
+    FROM certain_dates JOIN query_%d_articles ON query_%d_articles.doc_id = certain_dates.doc_id 
+    WHERE YEAR(date) > 2000 AND YEAR(date) <= 2009
+    GROUP BY doc_id 
+    ORDER BY ABS(position-346)""" % (q.id, q.id)
     logging.debug(sql)
     for _id, date_crawled in session.execute(sql):
         likely_dates[_id] = ("Certain", prepare_date(date_crawled))
