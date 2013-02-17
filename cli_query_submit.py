@@ -32,7 +32,7 @@ def mean(items):
 def prepare_date(input_date):
     start = datetime.datetime(year=1970,month=1,day=1)
     diff = input_date - start
-    return diff.total_seconds()*1000
+    return int(diff.total_seconds()*1000)
 
 def compute_likely_date(date_recs, certain = False):
     ret = None 
