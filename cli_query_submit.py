@@ -332,7 +332,7 @@ if __name__ == "__main__":
         # Compute properties for each document 
         for doc in documents:
             doc_struct = {key : None for key in ["pos_phrases", "pos_sentences", "neg_phrases", "neg_sentences", 
-                "pos_phrases_rel", "neg_phrases_rel", "id", "date_method", "average_sentence_prob", "average_phrase_prob"]}
+                "pos_phrases_rel", "neg_phrases_rel", "id", "date_method", "average_phrase_prob", "label"]}
             id = doc.id 
             doc_struct["id"] = id; 
             # Check the date method
@@ -346,7 +346,16 @@ if __name__ == "__main__":
 
             doc_struct["pos_phrases_rel"] = phrase_relevance[id]['pos']
             doc_struct["neg_phrases_rel"] = phrase_relevance[id]['neg']
-            doc_struct["average_phrase_prob"] = 0.5*(phrase_relevance[id]['prob_pos'] + phrase_relevance[id]['prob_neg'])
+            doc_struct["average_phrase_prob"] = round(0.5*(phrase_relevance[id]['prob_pos'] + phrase_relevance[id]['prob_neg']), 2);
+
+            label = None
+            if doc.label == "Negative":
+                label = -1;
+            elif doc.label == "Positive":
+                label = 1
+            else:
+                label = 0
+            doc_struct["label"] = label
 
             # Append to result structure
             if date not in ret:
