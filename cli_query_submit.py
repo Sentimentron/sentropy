@@ -232,6 +232,7 @@ if __name__ == "__main__":
     # Load the documents
     documents = set([])
     document_domain_mapping = {}
+    document_id_mapping = {}
     sql = """SELECT documents.id, documents.article_id, documents.length, documents.label, 
         documents.headline, documents.pos_phrases, documents.neg_phrases, documents.pos_sentences,
         documents.neg_sentences, query_%d_articles.domain_id FROM query_%d_articles LEFT JOIN documents ON query_%d_articles.doc_id = documents.id""" % (q.id, q.id, q.id)
@@ -253,6 +254,7 @@ if __name__ == "__main__":
         d = Document(article_id, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases, headline)
         d.id = _id 
         documents.add(d)
+        document_id_mapping[d.id] = d
 
         logging.info("Loaded document %d", d.id)
 
@@ -387,12 +389,16 @@ if __name__ == "__main__":
     }
 
     for domain in domains:
-        _id = domain
-        if _id not in document_domain_mapping: 
-            continue 
-        subdoc = document_domain_mapping[_id]
+        _id = domain.id
+        if _id not in document_domain_mapping:
+            continue
+        logging.debug(document_id_mapping.keys())
+        logging.debug(document_domain_mapping.keys())
+        subdoc_ids = document_domain_mapping[_id]
+        subdocs  = [document_id_mapping[s] for s in subdoc_ids]
+
         logging.info("%s: Generating summary for '%s'...", q, domain)
-        result['details'][domain.key] = generate_summary(subdoc, likely_dates, document_phrase_relevance)
+        result['details'][domain.key] = generate_summary(subdocs, likely_dates, document_phrase_relevance)
 
     print json.dumps(result, indent=4)
 
