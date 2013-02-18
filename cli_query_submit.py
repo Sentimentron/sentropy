@@ -139,6 +139,27 @@ if __name__ == "__main__":
     session.execute(sql)
 
     #
+    # Keyword housekeeping
+    for keyword in keywords: 
+        _id = keyword.id 
+        sql = "INSERT INTO query_%d_keywords VALUES (%d)" % (q.id, _id)
+        session.execute(sql)
+
+    if using_keywords and not using_domains:
+        sql = """SELECT articles.domain_id, COUNT(*) as Count FROM articles JOIN documents ON articles.id = documents.article_id JOIN 
+            keyword_adjacencies ON keyword_adjacencies.doc_id = documents.id, query_%d_keywords  
+            WHERE query_%d_keywords.id = keyword_adjacencies.key1_id OR query_%d_keywords.id = keyword_adjacencies.key2_id
+            GROUP BY articles.domain_id
+            ORDER BY count DESC LIMIT 0,5""" % (q.id, q.id, q.id)
+        logging.debug(sql);
+        for domain_id, count in session.execute(sql):
+            logging.debug("Consolidated: Domain(%d) (%d)", domain_id, count)
+            domain = session.query(Domain).get(domain_id)
+            domains.add(domain)
+            raw_domain_count += 1
+            using_domains = True 
+
+    #
     # Article domain resolution
     documents_domains = set([]);
     for d in domains:
@@ -213,13 +234,6 @@ if __name__ == "__main__":
                 logging.debug(sql)
                 session.execute(sql)
     logging.info("Query(%d): retrieved keyword relevant documents", q.id)
-
-    #
-    # Keyword housekeeping
-    for keyword in keywords: 
-        _id = keyword.id 
-        sql = "INSERT INTO query_%d_keywords VALUES (%d)" % (q.id, _id)
-        session.execute(sql)
 
     #
     # Final article set resolution 
