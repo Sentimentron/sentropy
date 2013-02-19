@@ -616,4 +616,4 @@ class BoilerPipeWorker(threading.Thread):
         if content is None:
             raise ValueError(("Couldn't find response", r.text))
 
-        self.result = content.text 
+        self.result = content.text.encode('ascii','ignore') 
