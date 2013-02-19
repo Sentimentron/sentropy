@@ -19,7 +19,7 @@ import core
 
 def get_redis_instance(db=1):
     host = core.get_redis_host()
-    return redis.StrictRedis(host=host, port=6379, db=1)
+    return redis.StrictRedis(host=host, port=6379, db=db)
 
 def cache_keywords():
     core.configure_logging('debug')
