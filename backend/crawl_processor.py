@@ -541,13 +541,14 @@ class DomainResolutionWorker(object):
             return _id 
 
         # If it doesn't, create it
-        sql = "INSERT IGNORE INTO domains (`key`,`date`) VALUES (%s, NOW())"
+        sql = "INSERT IGNORE INTO domains (`key`,`date`) VALUES ('%s', NOW())"
         logging.debug(sql, domain)
         logging.info("DomainResolutionWorker: inserting %s..." % domain)
         try:
             session.execute(sql % (domain,))
             session.commit()
         except Exception as ex:
+            logging.error(str(ex))
             logging.error(type(ex))
         return None 
 
