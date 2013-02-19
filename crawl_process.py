@@ -58,7 +58,7 @@ def worker_func(article_id):
         return article_id
 
     status = cp.process_record((article.crawl_id, (article.headers, article.content, article.url, \
-        article.date_crawled, article.content_type)))
+        article.date_crawled, article.content_type)), core.get_redis_host())
 
     if status is None:
         record = RawArticleResult(article_id, "Error")

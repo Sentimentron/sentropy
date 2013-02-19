@@ -26,7 +26,7 @@ import pydate
 import pysen
 import pysen.models
 import MySQLdb as mdb
-
+import redis
 
 from db import Article, Domain, DomainController, ArticleController
 from db import Keyword, KeywordController
@@ -165,7 +165,7 @@ class CrawlProcessor(object):
             logging.info("%s: hasn't been processed yet", url)
             return True 
 
-    def process_record(self, item):
+    def process_record(self, item, redis_server):
         if len(item) != 2:
             raise ValueError(item)
         if not self._check_processed(item):
@@ -174,7 +174,7 @@ class CrawlProcessor(object):
         while ret == None and retries > 0:
             try:
                 retries -= 1
-                ret = self._process_record(item)
+                ret = self._process_record(item, redis_server)
             except Exception as ex:
                 import traceback
                 print >> sys.stderr, ex
@@ -185,7 +185,7 @@ class CrawlProcessor(object):
         return ret 
 
 
-    def _process_record(self, item_arg):
+    def _process_record(self, item_arg, redis_server):
 
         crawl_id, record = item_arg
         headers, content, url, date_crawled, content_type = record
@@ -356,7 +356,7 @@ class CrawlProcessor(object):
                 logging.error(ex)
 
         # Resolve keyword identifiers
-        keyword_resolution_worker = KeywordResolutionWorker([k.word for k in keywords])
+        keyword_resolution_worker = KeywordResolutionWorker([k.word for k in keywords], redis_server)
         keyword_resolution_worker.start()
             
         # Run sentiment analysis
@@ -546,19 +546,30 @@ class DomainResolutionWorker(object):
 
 class KeywordResolutionWorker(threading.Thread):
 
-    def __init__(self, keywords):
+    def __init__(self, keywords, redis_server):
         self.in_keywords  = keywords
         self.out_keywords = {}
         threading.Thread.__init__(self)
-
-
-    def run(self):
-        # Open the mysqldatabase connection
         logging.info("Keyword resolution: opening DB...")
         host = os.environ["SENT_DB_URL"]
         user = os.environ["SENT_DB_USER"]
         pswd = os.environ["SENT_DB_PASS"]
-        con = mdb.connect(host, user, pswd, "sentimentron")
+        self.db_con = mdb.connect(host, user, pswd, "sentimentron")
+        self.r  = redis.StrictRedis(host=redis_server, port=6379, db=1)
+
+    def run(self):
+
+        con = self.db_con
+        r = self.r 
+
+        # Try and retrieve some of the keywords from the redis server
+        db_resolve = set([])
+        for key in self.in_keywords:
+            _id = r.get(key)
+            if _id is None:
+                db_resolve.add(key)
+            else:
+                self.out_keywords[key] = _id 
 
         # Create the 1st-phase query
         sql = "INSERT IGNORE INTO keywords (`word`) VALUES (%s)"
@@ -566,7 +577,7 @@ class KeywordResolutionWorker(threading.Thread):
         cur = con.cursor()
         logging.info("Keyword resolution: 1st-phase INSERT")
         #logging.debug(self.in_keywords)
-        cur.executemany(sql, [(k,) for k in self.in_keywords])
+        cur.executemany(sql, [(k,) for k in db_resolve])
         con.commit()
 
         # Now the 2nd-phase, getting the IDs
