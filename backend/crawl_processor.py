@@ -356,7 +356,7 @@ class CrawlProcessor(object):
                 logging.error(ex)
 
         # Resolve keyword identifiers
-        keyword_resolution_worker = KeywordResolutionWorker([k.word for k in keywords], redis_server)
+        keyword_resolution_worker = KeywordResolutionWorker(set([k.word for k in keywords]), redis_server)
         keyword_resolution_worker.start()
             
         # Run sentiment analysis
@@ -555,7 +555,7 @@ class KeywordResolutionWorker(threading.Thread):
         user = os.environ["SENT_DB_USER"]
         pswd = os.environ["SENT_DB_PASS"]
         self.db_con = mdb.connect(host, user, pswd, "sentimentron")
-        self.r  = redis.StrictRedis(host=redis_server, port=6379, db=1)
+        self.r  = redis.Redis(host=redis_server, port=6379, db=1)
 
     def run(self):
 
@@ -569,7 +569,8 @@ class KeywordResolutionWorker(threading.Thread):
             if _id is None:
                 db_resolve.add(key)
             else:
-                self.out_keywords[key] = _id 
+                logging.debug(('Redis', key, _id))
+                self.out_keywords[key] = int(_id )
 
         # Create the 1st-phase query
         sql = "INSERT IGNORE INTO keywords (`word`) VALUES (%s)"
@@ -585,7 +586,7 @@ class KeywordResolutionWorker(threading.Thread):
         for key in self.in_keywords:
             cur.execute(sql, (key,))
             identifier, = cur.fetchone()
-            thing = (key, identifier)
+            thing = ('DB', key, identifier)
             logging.debug(thing)
             self.out_keywords[key] = identifier
 
