@@ -40,7 +40,7 @@ def cache_keywords():
     logging.info("Caching %d keywords...", total)
     cached = 0
     for _id, word in session.execute("SELECT id, word FROM keywords"):
-        r.set(k.word, k.id)
+        r.set(word, _id)
         cached += 1
         if cached % 1000 == 0:
             logging.info("Cached %d keywords (%.2f%% done)", it.count(), 100*cached)
