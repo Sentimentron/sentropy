@@ -50,3 +50,9 @@ def configure_logging(level=None):
 			log_level = LOG_LEVELS[level]
 
 	logger.setLevel(log_level)
+
+def get_redis_host():
+	if "SENT_REDIS_HOST" not in os.environ:
+		return 'localhost'
+
+	return os.environ['SENT_REDIS_HOST']
