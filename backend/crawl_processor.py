@@ -142,7 +142,8 @@ class CrawlProcessor(object):
         self.swc = SoftwareVersionsController(self._engine, self._session)
         self.redis_kw = redis.Redis(host=redis_server, port=6379, db=1)
         self.redis_dm = redis.Redis(host=redis_server, port=6379, db=2)
-        self.drw = DomainResolutionWorker(self._session, self.redis_dm)
+        dm_session = Session(bind=self._engine, autocommit = False)
+        self.drw = DomainResolutionWorker(dm_session, self.redis_dm)
 
 
     def _check_processed(self, item):
@@ -544,10 +545,11 @@ class DomainResolutionWorker(object):
         logging.debug(sql, domain)
         logging.info("DomainResolutionWorker: inserting %s..." % domain)
         try:
-            cur.execute(sql,(domain,))
-            self.con.commit()
-        except mdb.OperationalError as ex:
-            return None 
+            session.execute(sql,(domain,))
+            session.commit()
+        except Exception as ex:
+            logging.error(type(ex))
+        return None 
 
 class KeywordResolutionWorker(threading.Thread):
 
