@@ -10,6 +10,7 @@ import json
 import calendar
 import types
 import datetime
+import time 
 
 from sqlalchemy import create_engine
 from sqlalchemy.exc import *
@@ -54,6 +55,8 @@ def compute_likely_date(date_recs, certain = False):
     return min_value
 
 if __name__ == "__main__":
+
+    time_started_at = time.time()
 
     core.configure_logging("debug")
 
@@ -306,7 +309,7 @@ if __name__ == "__main__":
             relevant TINYINT(1),
             prob FLOAT,
             label enum('Positive','Unknown','Negative')
-        ) ENGINE=MEMORY """ % (q.id, )
+        ) ENGINE=MyISAM""" % (q.id, )
     logging.debug(sql)
     session.execute(sql)
 
@@ -456,19 +459,25 @@ if __name__ == "__main__":
     #
     # General information
     logging.info("%s: Gathering information...", q);
-    info = {#'articles': session.query(Article).count(),
-        #'documents': session.query(Document).count(),
-        #'keywords' : session.query(Keyword).count(),
-        #'keyword_incidences' : session.query(KeywordIncidence).count(),
-        #'keyword_bigrams': session.query(KeywordAdjacency).count(),
-        #'sentences': session.query(Sentence).count(),
-        #'phrases': session.query(Phrase).count(),
+
+    total_phrases, total_sentences = 0, 0
+    for d in documents:
+        total_phrases += d.pos_phrases + d.neg_phrases
+        total_sentences += d.pos_sentences + d.neg_sentences
+
+    info = {
         "query_text": q.text,
+        'documents_returned': len(documents),
         'domains_returned': len(domains),
         'keywords_returned': len(keywords),
+        'keyword_set' : [k.word for k in keywords],
+        'phrases_returned': total_phrases,
+        'sentences_returned': total_sentences,
         'using_keywords': int(using_keywords),
-        'result_version': '1'
+        'result_version': '1',
+        'query_time': round(time.time() - time_started_at,1)
     }
+
     logging.info("%s: Generating overall summary...", q);
     result = {
         'info': info, 
