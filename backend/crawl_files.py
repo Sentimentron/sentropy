@@ -54,6 +54,7 @@ class CrawlFileController(object):
 		decompressed_fp = open(fname, 'w+b')
 		subprocess.check_call(["xz", "-d"], stdin=fp, stdout=decompressed_fp)
 		decompressed_fp.close()
+		fp.close()
 		return fname
 
 	def read_CrawlFileSQL(self, fname, delete_after=True):

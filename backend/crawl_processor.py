@@ -108,7 +108,7 @@ class KeywordSet(object):
 
 class CrawlProcessor(object):
 
-    __VERSION__ = "CrawlProcessor-0.2"
+    __VERSION__ = "CrawlProcessor-0.2.1"
 
     def __init__(self, engine, redis_server, stop_list="keyword_filter.txt"):
 
@@ -140,8 +140,11 @@ class CrawlProcessor(object):
         self.ex  = extract.TermExtractor()
         self.kwc = KeywordController(self._engine, self._session)
         self.swc = SoftwareVersionsController(self._engine, self._session)
-        self.drw = DomainResolutionWorker()
-        self.redis = redis.Redis(host=redis_server, port=6379, db=1)
+        self.redis_kw = redis.Redis(host=redis_server, port=6379, db=1)
+        self.redis_dm = redis.Redis(host=redis_server, port=6379, db=2)
+        dm_session = Session(bind=self._engine, autocommit = False)
+        self.drw = DomainResolutionWorker(dm_session, self.redis_dm)
+
 
     def _check_processed(self, item):
         crawl_id, record = item 
@@ -357,7 +360,7 @@ class CrawlProcessor(object):
                 logging.error(ex)
 
         # Resolve keyword identifiers
-        keyword_resolution_worker = KeywordResolutionWorker(set([k.word for k in keywords]), self.redis)
+        keyword_resolution_worker = KeywordResolutionWorker(set([k.word for k in keywords]), self.redis_kw)
         keyword_resolution_worker.start()
             
         # Run sentiment analysis
@@ -515,35 +518,39 @@ class CrawlProcessor(object):
 
 class DomainResolutionWorker(object):
 
-    def __init__(self):
-        import MySQLdb as mdb
-        logging.info("Domain resolution: opening DB...")
-        host = os.environ["SENT_DB_URL"]
-        user = os.environ["SENT_DB_USER"]
-        pswd = os.environ["SENT_DB_PASS"]
-        self.con = mdb.connect(host, user, pswd, "sentimentron")
+    def __init__(self, session, redis):
+        self.session = session
+        self.redis   = redis 
 
     def get_domain(self, domain):
 
-        cur = self.con.cursor()
+        # Check if the domain exists in redis
+        _id = self.redis.get(domain)
+        if _id is not None:
+            logging.info(("Redis", domain, _id))
+            return int(_id)
+
+        session = self.session
 
         # Check if the domain exists
         logging.info("DomainResolutionWorker: checking %s..." % domain)
-        sql = "SELECT id FROM domains WHERE `key` = %s"
-        cur.execute(sql,(domain,))
-        for row, in cur:
-            logging.info((domain, row))
-            return row 
+        sql = "SELECT id FROM domains WHERE `key` = '%s'" % (domain) 
+        for _id, in session.execute(sql):
+            logging.info(("DB", domain, _id))
+            self.redis.set(domain, _id)
+            return _id 
 
         # If it doesn't, create it
-        sql = "INSERT IGNORE INTO domains (`key`,`date`) VALUES (%s, NOW())"
+        sql = "INSERT IGNORE INTO domains (`key`,`date`) VALUES ('%s', NOW())"
         logging.debug(sql, domain)
         logging.info("DomainResolutionWorker: inserting %s..." % domain)
         try:
-            cur.execute(sql,(domain,))
-            self.con.commit()
-        except mdb.OperationalError as ex:
-            return None 
+            session.execute(sql % (domain,))
+            session.commit()
+        except Exception as ex:
+            logging.error(str(ex))
+            logging.error(type(ex))
+        return None 
 
 class KeywordResolutionWorker(threading.Thread):
 
