@@ -532,7 +532,7 @@ class CertainDate(Base):
 
 	@validates('position')
 	def val_position(self, key, value):
-		assert value > 0
+		assert value >= 0
 		return value
 
 	def __init__(self, date, document, position):
