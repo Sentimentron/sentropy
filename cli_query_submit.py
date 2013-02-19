@@ -30,14 +30,9 @@ def mean(items):
     return len(items)/(1.0*sum(items))
 
 def prepare_date(input_date):
-    if type(input_date) is types.TupleType:
-        return time.mktime(input_date) * 1000
-    elif type(input_date) is datetime.datetime:
-        return time.mktime(input_date.date().timetuple()) * 1000
-    elif type(input_date) is datetime.date:
-        return time.mktime(input_date.timetuple()) * 1000
-    else:
-        raise TypeError(type(input_date))
+    start = datetime.datetime(year=1970,month=1,day=1)
+    diff = input_date - start
+    return int(diff.total_seconds()*1000)
 
 def compute_likely_date(date_recs, certain = False):
     ret = None 
@@ -129,28 +124,47 @@ if __name__ == "__main__":
     # Temporary table creation
     sql = """CREATE TEMPORARY TABLE query_%d_articles (
             id INTEGER PRIMARY KEY,
-            doc_id INTEGER,
-            date_certain DATE,
-            date_uncertain DATE,
-            date_crawled DATE,
-            keywords TINYINT(1),
-            domains  TINYINT(1)
+            doc_id INTEGER NOT NULL,
+            domain_id INTEGER,
+            keywords TINYINT(1) NOT NULL,
+            domains  TINYINT(1) NOT NULL
         ) ENGINE=MEMORY;""" % (q.id,)
     logging.debug(sql)
     session.execute(sql)
 
-    sql = """CREATE TEMPORARY TABLE ENGINE=MEMORY query_%d_keywords (
+    sql = """CREATE TEMPORARY TABLE query_%d_keywords (
             id INTEGER PRIMARY KEY 
     ) ENGINE=MEMORY""" % (q.id,)
     logging.debug(sql)
     session.execute(sql)
 
     #
+    # Keyword housekeeping
+    for keyword in keywords: 
+        _id = keyword.id 
+        sql = "INSERT INTO query_%d_keywords VALUES (%d)" % (q.id, _id)
+        session.execute(sql)
+
+    if using_keywords and not using_domains:
+        sql = """SELECT articles.domain_id, COUNT(*) as Count FROM articles JOIN documents ON articles.id = documents.article_id JOIN 
+            keyword_adjacencies ON keyword_adjacencies.doc_id = documents.id, query_%d_keywords  
+            WHERE query_%d_keywords.id = keyword_adjacencies.key1_id OR query_%d_keywords.id = keyword_adjacencies.key2_id
+            GROUP BY articles.domain_id
+            ORDER BY Count DESC LIMIT 0,5""" % (q.id, q.id, q.id)
+        logging.debug(sql);
+        for domain_id, count in session.execute(sql):
+            logging.debug("Consolidated: Domain(%d) (%d)", domain_id, count)
+            domain = session.query(Domain).get(domain_id)
+            domains.add(domain)
+            raw_domain_count += 1
+            using_domains = True 
+
+    #
     # Article domain resolution
     documents_domains = set([]);
     for d in domains:
         sql = """INSERT INTO query_%d_articles 
-        SELECT documents.article_id, documents.id, NULL, NULL, NULL, 0, 1 
+        SELECT documents.article_id, documents.id, articles.domain_id, 0, 1 
         FROM documents JOIN articles ON article_id = articles.id 
         WHERE articles.domain_id = %d""" % (q.id, d.id)
         logging.debug(sql)
@@ -160,34 +174,66 @@ if __name__ == "__main__":
     #
     # Identify documents containing the given keywords 
     documents_keywords = set([])
+
+    _q_condition = "AND"
+    if raw_keyword_count == 1:
+        _q_condition = "OR"
+
+    _kw_list = []
     if raw_keyword_count > 1:
         for key1, key2 in itertools.combinations(keywords, 2):
-            sql = """INSERT INTO query_%d_articles 
-            SELECT articles.id, documents.id, NULL, NULL, NULL, 1, 0 
-            FROM keyword_adjacencies JOIN documents ON keyword_adjacencies.doc_id = documents.id
-            JOIN articles ON documents.article_id = articles.id
-            WHERE key1_id = %d AND key2_id = %d
-            ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, key1_id, key2_id)
-            logging.debug(sql);
-            session.execute(sql);
+            _kw_list.append((key1.id, key2.id))
     else:
         for keyword in keywords:
-            sql = """INSERT INTO query_%d_articles 
-            SELECT articles.id, documents.id, NULL, NULL, NULL, 1, 0 
-            FROM keyword_adjacencies JOIN documents ON keyword_adjacencies.doc_id = documents.id
-            JOIN articles ON documents.article_id = articles.id
-            WHERE key1_id = %d OR key2_id = %d
-            ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, keyword.id, keyword.id)
-            logging.debug(sql)
-            session.execute(sql)
-    logging.info("Query(%d): retrieved keyword relevant documents", q.id)
+            _kw_list.append((keyword.id, keyword.id))
 
-    #
-    # Keyword housekeeping
-    for keyword in keywords: 
-        _id = keyword.id 
-        sql = "INSERT INTO query_%d_keywords VALUES (%d)" % (q.id, _id)
+    if using_domains:
+        sql = """CREATE TEMPORARY TABLE query_%d_article_ids (
+                id INTEGER PRIMARY KEY 
+        ) ENGINE=MEMORY""" % (q.id,)
+        logging.debug(sql)
         session.execute(sql)
+
+        sql = """INSERT INTO query_%d_article_ids SELECT id FROM query_%d_articles"""  % (q.id, q.id)
+        logging.debug(sql)
+        session.execute(sql)
+        _article_source = "query_%d_article_ids" % (q.id,)
+    else:
+        _article_source = "articles"
+
+    for key1, key2 in _kw_list:
+        sql = """INSERT INTO query_%d_articles
+            SELECT %s.id, documents.id, NULL, 1, 0
+                FROM keyword_adjacencies RIGHT JOIN documents ON keyword_adjacencies.doc_id = documents.id
+                RIGHT JOIN %s ON documents.article_id = %s.id 
+                WHERE key1_id = %d %s key2_id = %d
+                ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, _article_source, _article_source, _article_source, key1, _q_condition, key2)
+
+        logging.debug(sql)
+        session.execute(sql)
+
+    if False:
+        if raw_keyword_count > 1:
+            for key1, key2 in itertools.combinations(keywords, 2):
+                sql = """INSERT INTO query_%d_articles 
+                SELECT articles.id, documents.id, NULL, 1, 0 
+                FROM keyword_adjacencies RIGHT JOIN documents ON keyword_adjacencies.doc_id = documents.id
+                RIGHT JOIN articles ON documents.article_id = articles.id 
+                WHERE key1_id = %d AND key2_id = %d
+                ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, key1_id, key2_id)
+                logging.debug(sql);
+                session.execute(sql);
+        else:
+            for keyword in keywords:
+                sql = """INSERT INTO query_%d_articles 
+                SELECT articles.id, documents.id, NULL, 1, 0 
+                FROM keyword_adjacencies RIGHT JOIN documents ON keyword_adjacencies.doc_id = documents.id
+                RIGHT JOIN articles ON documents.article_id = articles.id
+                WHERE key1_id = %d OR key2_id = %d
+                ON DUPLICATE KEY UPDATE keywords = 1""" % (q.id, keyword.id, keyword.id)
+                logging.debug(sql)
+                session.execute(sql)
+    logging.info("Query(%d): retrieved keyword relevant documents", q.id)
 
     #
     # Final article set resolution 
@@ -199,27 +245,55 @@ if __name__ == "__main__":
     #
     # Load the documents
     documents = set([])
-    sql = "SELECT doc_id FROM query_%d_articles" % (q.id, )
-    for _id, in session.execute(sql):
-        documents.add(session.query(Document).get(_id))
+    document_domain_mapping = {}
+    document_id_mapping = {}
+    sql = """SELECT documents.id, documents.article_id, documents.length, documents.label, 
+        documents.headline, documents.pos_phrases, documents.neg_phrases, documents.pos_sentences,
+        documents.neg_sentences, query_%d_articles.domain_id FROM query_%d_articles LEFT JOIN documents ON query_%d_articles.doc_id = documents.id""" % (q.id, q.id, q.id)
+    
+    for _id, article_id, length, label, headline, pos_phrases, neg_phrases, pos_sentences, neg_sentences, domain in session.execute(sql):
+
+        if domain is not None:
+            if domain not in document_domain_mapping:
+                document_domain_mapping[domain] = set([])
+            document_domain_mapping[domain].add(_id)
+
+        if label == "Positive":
+            label =  1
+        elif label == "Negative":
+            label = -1
+        else:
+            label = 0
+        
+        d = Document(article_id, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases, headline)
+        d.id = _id 
+        documents.add(d)
+        document_id_mapping[d.id] = d
+
+        logging.info("Loaded document %d", d.id)
+
 
     #
     # Date resolution 
     likely_dates = {}
-    sql = "SELECT articles.doc_id, articles.crawled FROM query_%d_articles JOIN articles ON query_%d_articles.id = articles.id" % (q.id, q.id)
+    sql = "SELECT doc_id, articles.crawled FROM query_%d_articles LEFT JOIN articles ON query_%d_articles.id = articles.id" % (q.id, q.id)
     logging.debug(sql)
     for _id, date_crawled in session.execute(sql):
         likely_dates[_id] = ("Crawled", prepare_date(date_crawled))
 
-    sql = """SELECT doc_id, `date` 
-    FROM uncertain_dates NATURAL JOIN query_%d_articles 
-    WHERE YEAR(date) > 2000 AND YEAR(date) <= 2008
-    GROUP BY doc_id ORDER BY ABS(position - 307)""" % (q.id, )
+    sql = """SELECT uncertain_dates.doc_id, `date` 
+    FROM uncertain_dates JOIN query_%d_articles ON uncertain_dates.doc_id = query_%d_articles.doc_id
+    WHERE YEAR(date) > 2000 AND YEAR(date) <= 2009
+    GROUP BY doc_id ORDER BY ABS(position - 307)""" % (q.id, q.id)
     logging.debug(sql)
     for _id, date_crawled in session.execute(sql):
         likely_dates[_id] = ("Uncertain", prepare_date(date_crawled))
 
-    sql = """SELECT doc_id, date FROM certain_dates NATURAL JOIN query_%d_articles GROUP BY doc_id ORDER BY ABS(position-346)""" % (q.id)
+    sql = """SELECT certain_dates.doc_id, `date` 
+    FROM certain_dates JOIN query_%d_articles ON query_%d_articles.doc_id = certain_dates.doc_id 
+    WHERE YEAR(date) > 2000 AND YEAR(date) <= 2009
+    GROUP BY doc_id 
+    ORDER BY ABS(position-346)""" % (q.id, q.id)
     logging.debug(sql)
     for _id, date_crawled in session.execute(sql):
         likely_dates[_id] = ("Certain", prepare_date(date_crawled))
@@ -238,15 +312,15 @@ if __name__ == "__main__":
 
     sql = """INSERT INTO query_%d_phrases 
         SELECT phrases.id, doc_id, 0, phrases.prob, phrases.label 
-        FROM query_%d_articles JOIN sentences ON doc_id = sentences.document
-        JOIN phrases ON sentences.id = phrases.sentence
+        FROM query_%d_articles LEFT JOIN sentences ON doc_id = sentences.document
+        LEFT JOIN phrases ON sentences.id = phrases.sentence
         WHERE phrases.label <> "Unknown"
         """  % (q.id, q.id)
     logging.debug(sql)
     session.execute(sql)
 
     sql = """INSERT INTO query_%d_phrases SELECT DISTINCT phrase_id, NULL, NULL, NULL, NULL
-        FROM keyword_incidences JOIN query_%d_keywords ON keyword_incidences.keyword_id = query_%d_keywords.id 
+        FROM keyword_incidences RIGHT JOIN query_%d_keywords ON keyword_incidences.keyword_id = query_%d_keywords.id 
         ON DUPLICATE KEY UPDATE relevant = 1""" % (q.id, q.id, q.id)
 
     logging.debug(sql)
@@ -254,13 +328,9 @@ if __name__ == "__main__":
 
     sql = """SELECT COUNT(*), doc_id, AVG(prob), label FROM query_%d_phrases WHERE relevant = 1 GROUP BY doc_id, label""" % (q.id, )
     logging.debug(sql)
-    document_phrase_relevance = {}
+    document_phrase_relevance = {_id : {'pos': 0, 'neg': 0, 'prob_pos': 0, 'prob_neg': 0} for _id in [d.id for d in documents]}
     for count, _id, prob, label in session.execute(sql):
-        if _id not in document_phrase_relevance:
-            document_phrase_relevance[_id] = {'pos': 0, 'neg': 0, 'prob_pos': 0, 'prob_neg': 0}
-
         record = document_phrase_relevance[_id]
-
         if label == "Positive":
             record['pos'] = count 
             record['prob_pos'] = prob
@@ -268,9 +338,81 @@ if __name__ == "__main__":
             record['neg'] = count 
             record['prob_neg'] = prob 
 
+    def generate_domain_summary(domain, session):
+        # Phase 1: generate statistics for the sites a domain links to 
+        total_self_links, total_external_links = 0, 0
+        external_links = {}
+        sql = """SELECT domains.`key`, COUNT(*) AS c FROM articles 
+            JOIN documents ON articles.id = documents.article_id
+            JOIN links_absolute ON links_absolute.document_id = documents.id 
+            JOIN domains ON links_absolute.domain_id = domains.id 
+            WHERE articles.domain_id = %d
+            GROUP BY links_absolute.domain_id""" % (domain.id)
+        logging.debug(sql)
+        for key, count in session.execute(sql):
+            if key == domain.key:
+                total_self_links += count
+            else:
+                total_external_links += count
+                external_links[key] = count 
+
+        # Phase 2: generate statistics for internal links (coverage)
+        internal = set([])
+        covered  = set([])
+        # Get all of the internal links
+        sql = """SELECT links_relative.path 
+        FROM articles JOIN documents ON articles.id = documents.article_id 
+        JOIN links_relative ON links_relative.document_id = documents.id 
+        WHERE articles.domain_id = %d AND LENGTH(links_relative.path) > 1;""" % (domain.id)
+        logging.debug(sql)
+
+        for path, in session.execute(sql):
+            internal.add(path)
+
+        # Get all of the articles
+        sql = """SELECT articles.path 
+        FROM articles
+        WHERE articles.domain_id = %d""" % (domain.id)
+        logging.debug(sql)
+        for path, in session.execute(sql):
+            covered.add(path)
+
+        cf = 100*len(covered.intersection(internal)) / len(covered.union(internal))
+
+        # Phase 3: Get a list of keywords the site often talks about 
+        sql = """SELECT count(*) AS c, doc_id, key1_id, keywords1.word, key2_id, keywords2.word FROM keyword_adjacencies 
+        JOIN keywords AS keywords1 ON keywords1.id = key1_id 
+        JOIN keywords AS keywords2 ON keywords2.id = key2_id 
+        JOIN documents ON keyword_adjacencies.doc_id = documents.id 
+        JOIN articles ON articles.id = documents.article_id 
+        WHERE articles.domain_id = %d 
+        GROUP BY key1_id, key2_id 
+        ORDER BY c DESC LIMIT 0,50;""" % (domain.id)
+        logging.debug(sql)
+        count_tracking = set([])
+        terms = set([])
+        word_forms = {}
+        for c, doc_id, key1, word1, key2, word2 in session.execute(sql):
+            if c in count_tracking:
+                continue 
+            word1, word2 = [x.lower() for x in [word1, word2]]
+            #terms.add(word1.lower() + " " + word2.lower())
+            if word1 in word_forms:
+                form = word_forms[word1]
+                form.append(word2)
+                word_forms.pop(word1, None)
+                word_forms[word2] = form
+            else:
+                word_forms[word2] = [word1, word2]
+
+        terms = [' '.join(word_forms[w]) for w in word_forms]
+
+        return external_links, cf, terms
+
+
     def generate_summary(documents, likely_dates, phrase_relevance):
 
-        [logging.debug(x) for x in [documents, likely_dates, phrase_relevance]]
+        #[logging.debug(x) for x in [documents, likely_dates, phrase_relevance]]
 
         # Create result structure
         ret = {} 
@@ -278,7 +420,7 @@ if __name__ == "__main__":
         # Compute properties for each document 
         for doc in documents:
             doc_struct = {key : None for key in ["pos_phrases", "pos_sentences", "neg_phrases", "neg_sentences", 
-                "pos_phrases_rel", "neg_phrases_rel", "id", "date_method", "average_sentence_prob", "average_phrase_prob"]}
+                "pos_phrases_rel", "neg_phrases_rel", "id", "date_method", "average_phrase_prob", "label"]}
             id = doc.id 
             doc_struct["id"] = id; 
             # Check the date method
@@ -292,7 +434,16 @@ if __name__ == "__main__":
 
             doc_struct["pos_phrases_rel"] = phrase_relevance[id]['pos']
             doc_struct["neg_phrases_rel"] = phrase_relevance[id]['neg']
-            doc_struct["average_phrase_prob"] = 0.5(phrase_relevance[id]['prob_pos'] + phrase_relevance[id]['prob_neg'])
+            doc_struct["average_phrase_prob"] = round(0.5*(phrase_relevance[id]['prob_pos'] + phrase_relevance[id]['prob_neg']), 2);
+
+            label = None
+            if doc.label == "Negative":
+                label = -1;
+            elif doc.label == "Positive":
+                label = 1
+            else:
+                label = 0
+            doc_struct["label"] = label
 
             # Append to result structure
             if date not in ret:
@@ -314,18 +465,37 @@ if __name__ == "__main__":
         #'phrases': session.query(Phrase).count(),
         "query_text": q.text,
         'domains_returned': len(domains),
-        'keywords_returned': len(keywords)
+        'keywords_returned': len(keywords),
+        'using_keywords': int(using_keywords),
+        'result_version': '1'
     }
     logging.info("%s: Generating overall summary...", q);
     result = {
         'info': info, 
-        'overview': generate_summary(documents, likely_dates, document_phrase_relevance)
+        'overview': generate_summary(documents, likely_dates, document_phrase_relevance),
+        'details': {}
     }
 
     for domain in domains:
+        _id = domain.id
+        if _id not in document_domain_mapping:
+            continue
+        logging.debug(document_id_mapping.keys())
+        logging.debug(document_domain_mapping.keys())
+        subdoc_ids = document_domain_mapping[_id]
+        subdocs  = [document_id_mapping[s] for s in subdoc_ids]
+
         logging.info("%s: Generating summary for '%s'...", q, domain)
-        subdoc = filter(lambda x: x.parent.domain == domain, documents)
-        result[domain.key] = generate_summary(subdoc, likely_dates, document_phrase_relevance)
+        record = {}
+        result['details'][domain.key] = record
+
+        record['docs'] = generate_summary(subdocs, likely_dates, document_phrase_relevance)
+        logging.info("%s: Getting additional info for '%s'...", q, domain)
+        external, cf, terms = generate_domain_summary(domain, session)
+        record['external'] = external 
+        record['coverage'] = round(cf)
+        record['terms'] = terms
+
 
     print json.dumps(result, indent=4)
 

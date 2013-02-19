@@ -75,7 +75,7 @@ def worker_func(article_id):
     return article_id
 
 def main():
-    core.configure_logging("crawl_process")
+    core.configure_logging()
 
     multi   = "--multi" in sys.argv
 

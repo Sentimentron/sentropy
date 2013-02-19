@@ -367,7 +367,7 @@ class CrawlProcessor(object):
 
         # Convert Pysen's model into database models
         try:
-            doc = Document(article, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases, headline)
+            doc = Document(article.id, label, length, pos_sentences, neg_sentences, pos_phrases, neg_phrases, headline)
         except ValueError as ex:
             logging.error(ex)
             logging.error("Skipping this document...")
