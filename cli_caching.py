@@ -17,9 +17,9 @@ import core
 # Loads keywords out of the database and stores them in a redis instance
 # (keyword => database_id) to assist insert
 
-def get_redis_instance():
+def get_redis_instance(db=1):
     host = core.get_redis_host()
-    return redis.StrictRedis(host=host, port=6379, db=0)
+    return redis.StrictRedis(host=host, port=6379, db=1)
 
 def cache_keywords():
     core.configure_logging('debug')
@@ -35,12 +35,12 @@ def cache_keywords():
         total = count 
 
     logging.debug("Establishing connection to redis...")
-    r = get_redis_instance()
+    r = get_redis_instance(1)
 
     logging.info("Caching %d keywords...", total)
     cached = 0
     for _id, word in session.execute("SELECT id, word FROM keywords"):
-        r.set(k.word, k.id)
+        r.set(word, _id)
         cached += 1
         if cached % 1000 == 0:
             logging.info("Cached %d keywords (%.2f%% done)", it.count(), 100*cached)
