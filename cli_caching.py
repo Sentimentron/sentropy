@@ -43,9 +43,9 @@ def cache_keywords():
         r.set(word, _id)
         cached += 1
         if cached % 1000 == 0:
-            logging.info("Cached %d keywords (%.2f%% done)", it.count(), 100*cached)
+            logging.info("Cached %d keywords (%.2f%% done)", cached, 100.0*cached/total)
 
-    logging.info("Cached %d keywords (%.2f%% done)", it.count(), 100*cached)
+    logging.info("Cached %d keywords (%.2f%% done)", cached, 100.0*cached/total)
 
 if __name__ == "__main__":
 
