@@ -47,7 +47,26 @@ def cache_keywords():
 
     logging.info("Cached %d keywords (%.2f%% done)", cached, 100.0*cached/total)
 
+def cache_domains():
+    core.configure_logging('debug')
+    from backend.db import Domain 
+    engine = core.get_database_engine_string()
+    logging.info("Using connection string '%s'" % (engine,))
+    engine = create_engine(engine, encoding='utf-8', isolation_level="READ UNCOMMITTED")
+    session = Session(bind=engine, autocommit = False)
+
+    logging.debug("Establishing connection to redis...")
+    r = get_redis_instance(2)
+
+    it = session.query(Domain)
+    for d in it:
+        r.set(d.key, d.id)
+        logging.info("Sent %s to the cache.", d)
+
+
 if __name__ == "__main__":
 
     if "--keywords" in sys.argv:
         cache_keywords()
+    if "--domains" in sys.argv:
+        cache_domains()

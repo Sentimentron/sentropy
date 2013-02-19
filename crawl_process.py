@@ -29,7 +29,7 @@ def worker_init():
     engine = core.get_database_engine_string()
     logging.info("Using connection string '%s'" % (engine,))
     engine = create_engine(engine, encoding='utf-8', isolation_level="READ COMMITTED")
-    cp = CrawlProcessor(engine)
+    cp = CrawlProcessor(engine, core.get_redis_host())
     session = Session(bind=engine, autocommit = False)
 
 
