@@ -570,7 +570,7 @@ class KeywordResolutionWorker(threading.Thread):
                 db_resolve.add(key)
             else:
                 logging.debug(('Redis', key, _id))
-                self.out_keywords[key] = int(_id )
+                self.out_keywords[key] = int(_id)
 
         # Create the 1st-phase query
         sql = "INSERT IGNORE INTO keywords (`word`) VALUES (%s)"
@@ -583,11 +583,12 @@ class KeywordResolutionWorker(threading.Thread):
 
         # Now the 2nd-phase, getting the IDs
         sql = "SELECT id FROM keywords WHERE `word` = %s"
-        for key in self.in_keywords:
+        for key in db_resolve:
             cur.execute(sql, (key,))
             identifier, = cur.fetchone()
             thing = ('DB', key, identifier)
             logging.debug(thing)
+            r.set(key, identifier)
             self.out_keywords[key] = identifier
 
 class BoilerPipeWorker(threading.Thread):
