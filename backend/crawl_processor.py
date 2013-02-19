@@ -545,7 +545,7 @@ class DomainResolutionWorker(object):
         logging.debug(sql, domain)
         logging.info("DomainResolutionWorker: inserting %s..." % domain)
         try:
-            session.execute(sql,(domain,))
+            session.execute(sql % (domain,))
             session.commit()
         except Exception as ex:
             logging.error(type(ex))
