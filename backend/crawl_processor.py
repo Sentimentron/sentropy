@@ -110,7 +110,7 @@ class CrawlProcessor(object):
 
     __VERSION__ = "CrawlProcessor-0.2"
 
-    def __init__(self, engine, stop_list="keyword_filter.txt"):
+    def __init__(self, engine, redis_server, stop_list="keyword_filter.txt"):
 
         if type(engine) == types.StringType:
             logging.info("Using connection string '%s'" % (engine,))
@@ -141,6 +141,7 @@ class CrawlProcessor(object):
         self.kwc = KeywordController(self._engine, self._session)
         self.swc = SoftwareVersionsController(self._engine, self._session)
         self.drw = DomainResolutionWorker()
+        self.redis = redis.Redis(host=redis_server, port=6379, db=1)
 
     def _check_processed(self, item):
         crawl_id, record = item 
@@ -165,7 +166,7 @@ class CrawlProcessor(object):
             logging.info("%s: hasn't been processed yet", url)
             return True 
 
-    def process_record(self, item, redis_server):
+    def process_record(self, item):
         if len(item) != 2:
             raise ValueError(item)
         if not self._check_processed(item):
@@ -174,7 +175,7 @@ class CrawlProcessor(object):
         while ret == None and retries > 0:
             try:
                 retries -= 1
-                ret = self._process_record(item, redis_server)
+                ret = self._process_record(item)
             except Exception as ex:
                 import traceback
                 print >> sys.stderr, ex
@@ -185,7 +186,7 @@ class CrawlProcessor(object):
         return ret 
 
 
-    def _process_record(self, item_arg, redis_server):
+    def _process_record(self, item_arg):
 
         crawl_id, record = item_arg
         headers, content, url, date_crawled, content_type = record
@@ -356,7 +357,7 @@ class CrawlProcessor(object):
                 logging.error(ex)
 
         # Resolve keyword identifiers
-        keyword_resolution_worker = KeywordResolutionWorker(set([k.word for k in keywords]), redis_server)
+        keyword_resolution_worker = KeywordResolutionWorker(set([k.word for k in keywords]), self.redis)
         keyword_resolution_worker.start()
             
         # Run sentiment analysis
@@ -555,7 +556,7 @@ class KeywordResolutionWorker(threading.Thread):
         user = os.environ["SENT_DB_USER"]
         pswd = os.environ["SENT_DB_PASS"]
         self.db_con = mdb.connect(host, user, pswd, "sentimentron")
-        self.r  = redis.Redis(host=redis_server, port=6379, db=1)
+        self.r  = redis_server
 
     def run(self):
 

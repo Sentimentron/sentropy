@@ -29,7 +29,7 @@ def worker_init():
     engine = core.get_database_engine_string()
     logging.info("Using connection string '%s'" % (engine,))
     engine = create_engine(engine, encoding='utf-8', isolation_level="READ COMMITTED")
-    cp = CrawlProcessor(engine)
+    cp = CrawlProcessor(engine, core.get_redis_host())
     session = Session(bind=engine, autocommit = False)
 
 
@@ -58,7 +58,7 @@ def worker_func(article_id):
         return article_id
 
     status = cp.process_record((article.crawl_id, (article.headers, article.content, article.url, \
-        article.date_crawled, article.content_type)), core.get_redis_host())
+        article.date_crawled, article.content_type)))
 
     if status is None:
         record = RawArticleResult(article_id, "Error")
