@@ -226,15 +226,19 @@ class DateResolutionService(MetaStackingResolutionService):
         super(DateResolutionService, self).__init__([
             e(engine) for e in [CertainDateResolutionService, UncertainDateResolutionService, CrawledDateResolutionService]])
 
+class Phrase(object):
+
+   def __init__(self, _id, score, prob, label):
+       self._id = _id; self.score = score; self.prob = prob; self.label = label
+
 class PhraseResolutionService(DatabaseResolutionService):
 
     def resolve(self, doc_id):
-        sql = """SELECT phrases.id
+        sql = """SELECT phrases.id, phrases.score, phrases.prob, phrases.label
             FROM phrases JOIN sentences on phrases.sentence = sentences.id 
             WHERE sentences.document = (:id)"""
-        for _id, in self._session.execute(sql, {'id': doc_id}):
-            logging.debug((doc_id, _id))
-            yield self._session.query(Phrase).get(_id)
+        for _id, score, prob, label in self._session.execute(sql, {'id': doc_id}):
+            yield Phrase(_id, score, prob, label)
 
 class PhraseRelevanceResolutionService(DatabaseResolutionService):
 
@@ -343,7 +347,7 @@ if __name__ == "__main__":
     core.configure_logging()
     engine = core.get_database_engine_string()
     logging.info("Using connection string '%s'" % (engine,))
-    engine = create_engine(engine, encoding='utf-8', isolation_level = 'READ COMMITTED')
+    engine = create_engine(engine, encoding='utf-8', isolation_level = 'READ UNCOMMITTED')
 
     kdproc  = KDQueryProcessor(engine)
     fd      = FuzzyDomainResolutionService(engine)
