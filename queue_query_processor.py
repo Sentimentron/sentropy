@@ -194,7 +194,7 @@ class CrawledDateResolutionService(DatabaseResolutionService):
             JOIN documents ON articles.id = documents.article_id 
             WHERE documents.id=(:id)"""
 
-        for date, in session.execute(sql, {'id': doc_id}):
+        for date, in self._session.execute(sql, {'id': doc_id}):
             return "Crawled", date 
 
 class CertainDateResolutionService(DatabaseResolutionService):
@@ -206,7 +206,7 @@ class CertainDateResolutionService(DatabaseResolutionService):
         ORDER BY ABS(certain_dates.position-346) 
         LIMIT 0,1"""
 
-        for date, in session.execute(sql, {'id': doc_id}):
+        for date, in self._session.execute(sql, {'id': doc_id}):
             return "Certain", date 
 
 class UncertainDateResolutionService(DatabaseResolutionService):
@@ -217,7 +217,7 @@ class UncertainDateResolutionService(DatabaseResolutionService):
         WHERE doc_id (:id)
         ORDER BY ABS(uncertain_dates.position - 307)"""
 
-        for date, in session.execute(sql, {'id': doc_id}):
+        for date, in self._session.execute(sql, {'id': doc_id}):
             return "Uncertain", date 
 
 class DateResolutionService(MetaStackingResolutionService):
