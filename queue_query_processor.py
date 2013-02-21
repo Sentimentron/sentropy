@@ -233,6 +233,7 @@ class PhraseResolutionService(DatabaseResolutionService):
             FROM phrases JOIN sentences on phrases.sentence = sentences.id 
             WHERE sentences.document = (:id)"""
         for _id, in self._session.execute(sql, {'id': doc_id}):
+            logging.debug((doc_id, _id))
             yield self._session.query(Phrase).get(_id)
 
 class PhraseRelevanceResolutionService(DatabaseResolutionService):
