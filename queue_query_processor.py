@@ -301,7 +301,7 @@ class KDQueryProcessor(object):
         # Return the documents
         dset = [self._session.query(Document).get(_id) for _id in dset]
 
-        return keywords, len(keywords)>0, domains, dmap, dset, dates, phrases, relevance
+        return keywords, len(keywords)>0, domains, dm_map, dset, dates, phrases, relevance
 
 
 def present(keywords, using_keywords, domains, dmap, dset, dates, phrases, relevance, query_text):
