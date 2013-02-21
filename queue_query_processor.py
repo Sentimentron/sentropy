@@ -229,8 +229,8 @@ class DateResolutionService(MetaStackingResolutionService):
 class PhraseResolutionService(DatabaseResolutionService):
 
     def resolve(self, doc_id):
-        sql = """SELECT phrase.id
-            FROM phrases JOIN sentences on phrase.sentence = sentences.id 
+        sql = """SELECT phrases.id
+            FROM phrases JOIN sentences on phrases.sentence = sentences.id 
             WHERE sentences.document = (:id)"""
         for _id, score, prob, label in self._session.execute(sql, {'id': doc_id}):
             yield self._session.query(Phrase).get(_id)
