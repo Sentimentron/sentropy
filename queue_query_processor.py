@@ -214,7 +214,7 @@ class UncertainDateResolutionService(DatabaseResolutionService):
     def resolve(self, doc_id):
         sql = """SELECT uncertain_dates.date
         FROM uncertain_dates 
-        WHERE doc_id (:id)
+        WHERE doc_id = (:id)
         ORDER BY ABS(uncertain_dates.position - 307)"""
 
         for date, in self._session.execute(sql, {'id': doc_id}):
