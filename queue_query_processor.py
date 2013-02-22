@@ -250,7 +250,7 @@ class PhraseRelevanceResolutionService(DatabaseResolutionService):
         sql = """SELECT keyword_id 
         FROM keyword_incidences 
         WHERE phrase_id = (:id)"""
-        for _id in self._session.execute(sql):
+        for _id in self._session.execute(sql, {'id': phrase_id}):
             if _id in keyword_set:
                 return True 
         return False
