@@ -246,7 +246,7 @@ class PhraseRelevanceResolutionService(DatabaseResolutionService):
         sql = """SELECT keyword_id 
         FROM keyword_incidences 
         WHERE phrase_id = (:id)"""
-        for _id in session.execute(sql):
+        for _id in self._session.execute(sql):
             if _id in keyword_set:
                 return True 
         return False
@@ -258,7 +258,7 @@ class KDQueryProcessor(object):
         self._kres   = KeywordIDResolutionService()
         self._dres   = DomainIDResolutionService()
 
-        self._d_res = DocumentKeywordResolutionService(self._engine)
+        self._d_res = DocumentDomainResolutionService(self._engine)
         self._k_res = DocumentKeywordResolutionService(self._engine)
         self._ka_res= KeywordAdjacencyResolutionService(self._engine)
 
@@ -272,6 +272,8 @@ class KDQueryProcessor(object):
         # Map keywords and domains to identifiers
         keywords = [(k, self._kres.resolve(k)) for k in keywords]
         domains  = [(d, self._dres.resolve(d)) for d in domains]
+
+        raw_input(domains); raw_input(keywords)
 
         dm_map = {}
 
