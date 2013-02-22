@@ -159,6 +159,8 @@ class KeywordAdjacencyResolutionService(DatabaseResolutionService):
         WHERE (key1_id = (:id) OR key2_id = (:id))
         AND doc_id = (:doc)"""
 
+        logging.debug(("KeywordAdj", keyword_id, document_id))
+
         for _id in self._session.execute(sql, {'id': keyword_id, 'doc': document_id}):
             return True 
         return False
@@ -174,6 +176,8 @@ class RedisResolutionService(ResolutionService):
             return self._cache[item]
 
         _id = self._redis.get(item)
+        if _id is not None:
+            _id = int(_id)
         self._cache[item] = _id 
         return _id 
 
@@ -273,8 +277,6 @@ class KDQueryProcessor(object):
         keywords = [(k, self._kres.resolve(k)) for k in keywords]
         domains  = [(d, self._dres.resolve(d)) for d in domains]
 
-        raw_input(domains); raw_input(keywords)
-
         dm_map = {}
 
         # Construct the domains set 
@@ -284,13 +286,13 @@ class KDQueryProcessor(object):
             dm_map[d] = domains
             logging.debug((dmset, d))
 
-        # Construct the final documents set 
+        # Construct the final documents set
         if len(keywords) == 0:
             dset = dmset 
         else:
             for d in dmset:
                 for raw, k in keywords:
-                    if self._ka_res.resolve(d, k):
+                    if self._ka_res.resolve(k,d):
                         dset.add(d)
                         break 
 
@@ -347,7 +349,7 @@ def present(keywords, using_keywords, domains, dmap, dset, dates, phrases, relev
 
 
 if __name__ == "__main__":
-    core.configure_logging()
+    core.configure_logging('debug')
     engine = core.get_database_engine_string()
     logging.info("Using connection string '%s'" % (engine,))
     engine = create_engine(engine, encoding='utf-8', isolation_level = 'READ UNCOMMITTED')
