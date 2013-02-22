@@ -233,7 +233,7 @@ class DateResolutionService(MetaStackingResolutionService):
 class Phrase(object):
 
    def __init__(self, _id, score, prob, label):
-       self._id = _id; self.score = score; self.prob = prob; self.label = label
+       self.id = _id; self.score = score; self.prob = prob; self.label = label
 
 class PhraseResolutionService(DatabaseResolutionService):
 
@@ -258,7 +258,8 @@ class PhraseRelevanceResolutionService(DatabaseResolutionService):
 class KDQueryProcessor(object):
 
     def __init__(self, engine):
-        self._engine = engine 
+        self._engine = engine
+        self._session = Session(bind=engine) 
         self._kres   = KeywordIDResolutionService()
         self._dres   = DomainIDResolutionService()
 
@@ -306,7 +307,11 @@ class KDQueryProcessor(object):
 
         # Resolve relevance 
         logging.info("Resolving phrase relevance...")
-        relevance = {i : [p for p in self._phrase_res_rel.resolve(i, keywords)] for i in dset}
+        relevance = {}
+        for doc_id in phrases:
+            for phrase in phrases[doc_id]:
+                phrase_id = phrase.id
+                relevance[phrase_id] = self._phrase_res_rel.resolve(phrase_id, keywords)
 
         # Return the documents
         dset = [self._session.query(Document).get(_id) for _id in dset]
