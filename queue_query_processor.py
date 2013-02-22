@@ -260,6 +260,7 @@ class KDQueryProcessor(object):
 
         self._date_res   = DateResolutionService(engine)
         self._phrase_res = PhraseResolutionService(engine)
+        self._phrase_res_rel = PhraseRelevanceResolutionService(engine)
 
     def process(self, keywords, domains):
         kwset, dmset, dset = set([]), set([]), set([])
