@@ -313,7 +313,7 @@ class KDQueryProcessor(object):
             logging.info("%d Resolving phrases...")
             pos, neg = 0, 0
             relevant_pos, relevant_neg = 0, 0
-            phrases = self._phrase_res.resolve(i)
+            phrases = self._phrase_res.resolve(d)
 
             for p in phrases:
 
@@ -329,7 +329,7 @@ class KDQueryProcessor(object):
                 doc.neg_sentences, relevant_pos, relevant_neg
             ])
 
-        raw_input(wr.getvalue())
+        raw_input(fp.getvalue())
 
 
         # Find the publication dates
