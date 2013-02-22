@@ -390,4 +390,4 @@ if __name__ == "__main__":
             logging.info((keyword, keywords))
 
         keywords, domains, dmap, dset, dates, phrases, relevance = kdproc.process(keywords, domains)
-        result = present(keywords, len(keywords)> 0, domains, dmap, dset, dates, phrases, relevance)
+        result = present(keywords, len(keywords)> 0, domains, dmap, dset, dates, phrases, relevance, query)
