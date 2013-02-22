@@ -273,6 +273,10 @@ class KDQueryProcessor(object):
         self._phrase_res_rel = PhraseRelevanceResolutionService(engine)
 
     def process(self, keywords, domains):
+
+        import csv
+        import StringIO
+
         kwset, dmset, dset = set([]), set([]), set([])
 
         # Map keywords and domains to identifiers
@@ -297,6 +301,36 @@ class KDQueryProcessor(object):
                     if self._ka_res.resolve(k,d):
                         dset.add(d)
                         break 
+        fp = StringIO.StringIO()
+        wr = csv.writer(fp)
+        for d in dset:
+            logging.info("%d Fetching document details", d)
+            doc = self._session.query(Document).get(d)
+
+            logging.info("%d Searching for publication dates...", d)
+            method, date = self._date_res.resolve(d)
+
+            logging.info("%d Resolving phrases...")
+            pos, neg = 0, 0
+            relevant_pos, relevant_neg = 0, 0
+            phrases = self._phrase_res.resolve(i)
+
+            for p in phrases:
+
+                if self._phrase_res_rel.resolve(p.id, keywords):
+                    if p.label == "Positive":
+                        relevant_pos += 1
+                    elif p.label == "Negative":
+                        relevant_neg += 1
+
+            wr.writerow ([
+                doc.id, method, date, 
+                doc.pos_phrases, doc.neg_phrases, doc.pos_phrases, doc.pos_sentences, 
+                doc.neg_sentences, relevant_pos, relevant_neg
+            ])
+
+        raw_input(wr.getvalue())
+
 
         # Find the publication dates
         logging.info("Searching for publication dates...")
