@@ -12,6 +12,7 @@ from sqlalchemy.orm import *
 from backend.db import UserQuery, UserQueryKeywordRecord, UserQueryDomainRecord, UserQueryArticleRecord
 from backend.db import Keyword, Domain, KeywordAdjacency, Article, Document, KeywordIncidence, Sentence, Phrase
 
+import boto.s3
 import boto.sqs 
 from boto.sqs.message import Message
 
@@ -327,6 +328,10 @@ class KDQueryProcessor(object):
 
 
 def present(keywords, using_keywords, domains, dmap, dset, dates, phrases, relevance, query_text):
+
+    import csv
+    import StringIO
+
     ret = {}
     info = {}
     info['query_time'] = 0
@@ -342,15 +347,21 @@ def present(keywords, using_keywords, domains, dmap, dset, dates, phrases, relev
 
     overview = {}
 
+    fp = StringIO.StringIO()
+    wr = csv.writer(fp)
+
     for doc in dset:
         method, date = dates[doc.id]
         pos_rel_phrases = len([d for d in relevance[doc.id] if d.label == "Positive"])
         neg_rel_phrases = len([d for d in relevance[doc.id] if d.label == "Negative"])
         prob_phrases = 0
-        overview[doc.id] = [method, date, 
+        row = [doc.id, method, date, 
             doc.pos_phrases, doc.neg_phrases, doc.pos_phrases, doc.pos_sentences, 
             doc.neg_sentences, pos_rel_phrases, neg_rel_phrases
         ]
+        wr.writerow(row)
+
+    print fp.getvalue()
 
 
 if __name__ == "__main__":
