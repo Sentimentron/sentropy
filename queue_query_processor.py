@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
 import logging
-import core 
+import core
+import datetime 
 
 from sqlalchemy import create_engine
 from sqlalchemy.exc import *
@@ -377,6 +378,12 @@ class JSONResultPresenter(ResultPresenter):
         elif label == "Positive":
             return 1
         return 0
+
+    @classmethod
+    def convert_date(cls, in_date):
+        start = datetime.datetime(year=1970, month=1, day=1)
+        diff  = in_date - start
+        return int(diff.total_seconds() * 1000)
 
     def add_result(self, id, domain, method, date, pos_phrases, neg_phrases, pos_sentences, neg_sentences, relevant_pos, relevant_neg, label, phrase_prob):
         # Add new domain if needed
