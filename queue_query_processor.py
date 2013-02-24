@@ -198,7 +198,7 @@ class DomainIDResolutionService(RedisResolutionService):
 
 class DateResolutionService(DatabaseResolutionService):
     @classmethod 
-    def prepare_date(cls, input_date):
+    def present_date(cls, input_date):
         start = datetime.datetime(year=1970,month=1,day=1)
         diff = input_date - start
         return int(diff.total_seconds()*1000)
