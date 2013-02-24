@@ -272,10 +272,7 @@ class KDQueryProcessor(object):
         self._phrase_res = PhraseResolutionService(engine)
         self._phrase_res_rel = PhraseRelevanceResolutionService(engine)
 
-    def process(self, keywords, domains):
-
-        import csv
-        import StringIO
+    def get_document_rows(self, keywords, domains):
 
         kwset, dmset, dset = set([]), set([]), set([])
 
@@ -300,9 +297,9 @@ class KDQueryProcessor(object):
                 for raw, k in keywords:
                     if self._ka_res.resolve(k,d):
                         dset.add(d)
+        
                         break 
-        fp = StringIO.StringIO()
-        wr = csv.writer(fp)
+
         for d in dset:
             logging.info("%d Fetching document details", d)
             doc = self._session.query(Document).get(d)
@@ -323,42 +320,11 @@ class KDQueryProcessor(object):
                     elif p.label == "Negative":
                         relevant_neg += 1
 
-            wr.writerow ([
+            yield [
                 doc.id, method, date, 
                 doc.pos_phrases, doc.neg_phrases, doc.pos_phrases, doc.pos_sentences, 
                 doc.neg_sentences, relevant_pos, relevant_neg
-            ])
-
-        raw_input(fp.getvalue())
-
-
-        # Find the publication dates
-        logging.info("Searching for publication dates...")
-        dates = {i : self._date_res.resolve(i) for i in dset}
-
-        # Resolve the phrases for things
-        logging.info("Resolving phrases....")
-        phrases = {i : [p for p in self._phrase_res.resolve(i)] for i in dset}
-
-        # Resolve relevance 
-        logging.info("Resolving phrase relevance...")
-        relevance = {}
-        for doc_id in phrases:
-            for phrase in phrases[doc_id]:
-                phrase_id = phrase.id
-                relevance[phrase_id] = self._phrase_res_rel.resolve(phrase_id, keywords)
-
-        # Return the documents
-        dset = [self._session.query(Document).get(_id) for _id in dset]
-
-        raw_input("keywords"); raw_input(keywords)
-        raw_input("domains"); raw_input(dm_map)
-        raw_input("dset"); raw_input(dset)
-        raw_input("dates"); raw_input(dates);
-        raw_input("phrases"); raw_input(phrases);
-        raw_input("relevance"); raw_input(relevance);
-
-        return keywords, domains, dm_map, dset, dates, phrases, relevance
+            ]
 
 
 def present(keywords, using_keywords, domains, dmap, dset, dates, phrases, relevance, query_text):
@@ -389,13 +355,11 @@ def present(keywords, using_keywords, domains, dmap, dset, dates, phrases, relev
         pos_rel_phrases = len([d for d in relevance[doc.id] if d.label == "Positive"])
         neg_rel_phrases = len([d for d in relevance[doc.id] if d.label == "Negative"])
         prob_phrases = 0
-        row = [doc.id, method, date, 
+        yield [doc.id, method, date, 
             doc.pos_phrases, doc.neg_phrases, doc.pos_phrases, doc.pos_sentences, 
             doc.neg_sentences, pos_rel_phrases, neg_rel_phrases
         ]
-        wr.writerow(row)
 
-    print fp.getvalue()
 
 
 if __name__ == "__main__":
@@ -423,5 +387,10 @@ if __name__ == "__main__":
             keywords.update(kwstack.resolve(keyword))
             logging.info((keyword, keywords))
 
-        keywords, domains, dmap, dset, dates, phrases, relevance = kdproc.process(keywords, domains)
-        result = present(keywords, len(keywords)> 0, domains, dmap, dset, dates, phrases, relevance, query)
+        import csv 
+        writer = csv.writer(open('sample.csv', 'w'))
+        for row in kdproc.get_document_rows(keywords, domains):
+            writer.writerow(row)
+
+        #keywords, domains, dmap, dset, dates, phrases, relevance = kdproc.process(keywords, domains)
+        #result = present(keywords, len(keywords)> 0, domains, dmap, dset, dates, phrases, relevance, query)
