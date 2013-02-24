@@ -39,6 +39,7 @@ class UserQuery(Base):
 	id 			= Column(Integer, Sequence('query_id_seq'), primary_key = True)
 	text 		= Column(String(255), unique = True, nullable = False)
 	fulfilled   = Column(DateTime)
+	email		= Column(String(254))
 
 	@validates('text')
 	def validate(self, key, value):
