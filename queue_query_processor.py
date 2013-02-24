@@ -413,7 +413,7 @@ class JSONResultPresenter(ResultPresenter):
 
         # Domain record 
         record = self.response[domain]
-        record.append([method, date, pos_phrases, neg_phrases, pos_sentences, neg_sentences, relevant_pos, relevant_neg, label, phrase_prob])
+        record.append([method, date, pos_phrases, neg_phrases, pos_sentences, neg_sentences, relevant_pos, relevant_neg, label, phrase_prob, id])
 
         # Misc record 
         info['sentences_returned'] += pos_sentences + neg_sentences
