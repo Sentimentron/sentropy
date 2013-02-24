@@ -418,7 +418,7 @@ class JSONResultPresenter(ResultPresenter):
         record = self.response['siteData'][domain]['docs']
         record.append([method, date, pos_phrases, neg_phrases, pos_sentences, neg_sentences, relevant_pos, relevant_neg, label, phrase_prob, id])
 
-        self.dset.add(id)
+        self.dset.add((id, domain))
 
         # Misc record 
         self.info['sentences_returned'] += pos_sentences + neg_sentences
@@ -457,12 +457,12 @@ class JSONResultPresenter(ResultPresenter):
                     record['all'].update(it)
                     record['external'][domain] += it.count()
                     continue
-                record['external'].update([link.domain])
+                record['external'].update([link.domain.key])
             word_forms = {}
             # Phase 3: Key terms
             logging.info("Resolving key terms for %d in %s", doc_id, domain)
             for kwad in doc.keyword_adjacencies:
-                word1, word2 = [x.lower() for x in [kwad.key1, kwad.key2]]
+                word1, word2 = [x.lower() for x in [kwad.key1.word, kwad.key2.word]]
                 if word1 in word_forms:
                     form = word_forms[word1]
                     form.append(word2)
@@ -479,7 +479,7 @@ class JSONResultPresenter(ResultPresenter):
             src = ret[domain]
 
             # Compute coverage information 
-            src['coverage'] = 100.0*len(src['known'] - src['all'])/len(src['all'])
+            src['coverage'] = 100.0*len(src['all'] - src['known'])/len(src['all'] | src['known'])
             src.pop('known', None)
             src.pop('all', None)
 
@@ -488,12 +488,10 @@ class JSONResultPresenter(ResultPresenter):
 
             # Find out what gets linked to, 5 categories excluding 'other'
             new_summary = {}
-            for dm, count in src['external'].most_common(5):
-                dmkey = dm.key 
+            for dmkey, count in src['external'].most_common(5):
                 new_summary[dmkey] = count 
             others = 0
-            for dm in src['external']:
-                dmkey = dm.key 
+            for dmkey in src['external']:
                 if dmkey not in new_summary:
                     others += 1
             new_summary['others'] = 1
