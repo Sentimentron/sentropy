@@ -294,21 +294,21 @@ class KDQueryProcessor(object):
 
         # Construct the domains set 
         for raw in domains:
-            d = list(self._d_res.resolve(domains[raw]))
-            dmset.update(d)
+            domain_contents = list(self._d_res.resolve(domains[raw]))
+            dmset.update([(d, raw) for d in domain_contents])
             
         # Construct the final documents set
         if len(keywords) == 0:
             dset = dmset 
         else:
-            for d in dmset:
+            for d, raw_domain in dmset:
                 for raw in keywords:
                     k = keywords[raw]
                     if self._ka_res.resolve(k,d):
-                        dset.add(d)
+                        dset.add(d, raw_domain)
                         break 
 
-        for d in dset:
+        for d, raw_domain in dset:
             logging.info("%d Fetching document details", d)
             doc = self._session.query(Document).get(d)
 
@@ -329,7 +329,7 @@ class KDQueryProcessor(object):
                         relevant_neg += 1
 
             yield [
-                doc.id, method, date, 
+                doc.id, raw_domain, method, date, 
                 doc.pos_phrases, doc.neg_phrases, doc.pos_phrases, doc.pos_sentences, 
                 doc.neg_sentences, relevant_pos, relevant_neg
             ]
