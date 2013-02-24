@@ -285,9 +285,9 @@ class KDQueryProcessor(object):
         self._phrase_res = PhraseResolutionService(engine)
         self._phrase_res_rel = PhraseRelevanceResolutionService(engine)
 
-    def get_document_rows(self, keywords, domains):
+    def get_document_rows(self, keywords, domains, dmset = set([])):
 
-        kwset, dmset, dset = set([]), set([]), set([])
+        kwset,  dset = set([]), set([])
 
         # Map keywords and domains to identifiers
         keywords = {k : self._kres.resolve(k) for k in keywords}
@@ -354,7 +354,7 @@ class ResultPresenter(object):
 
 class JSONResultPresenter(ResultPresenter):
 
-    def __init__(self, keywords, query_text):
+    def __init__(self, keywords, query_text, engine):
         super(JSONResultPresenter, self).__init__(keywords, query_text)
 
         info                       = {}
@@ -370,6 +370,9 @@ class JSONResultPresenter(ResultPresenter):
 
         self.info     = info
         self.response = {'info': info, 'siteData': {}}
+        self.dset     = set([])
+
+        self._session = Session(bind = engine)
 
     @classmethod 
     def convert_doc_label(cls, label):
@@ -415,13 +418,92 @@ class JSONResultPresenter(ResultPresenter):
         record = self.response['siteData'][domain]['docs']
         record.append([method, date, pos_phrases, neg_phrases, pos_sentences, neg_sentences, relevant_pos, relevant_neg, label, phrase_prob, id])
 
+        self.dset.add(id)
+
         # Misc record 
         self.info['sentences_returned'] += pos_sentences + neg_sentences
         self.info['phrases_returned'  ] += pos_phrases   + neg_phrases
         self.info['documents_returned'] += 1
 
+    def additional(self):
+        from collections import Counter
+        import random
+        ret = {}
+        # Collect statistics
+        for doc_id, domain in self.dset:
+            if domain not in ret:
+                ret[domain] = {'external': Counter(), 'keywords': Counter([]), 'known': set([]), 'all': set([])}
+            record = ret[domain]
+            doc = self._session.query(Document).get(doc_id)
+            article = doc.parent
+            record['known'].add(article)
+
+            # Phase 1: relative links to site pages
+            logging.info("Resolving internal links for %d in %s", doc_id, domain)
+            for link in doc.relative_links:
+                path = link.path.partition('#')[0]
+                # TODO: deal with relative paths
+                it   = self._session.query(Article).filter_by(domain_id = article.domain_id, path = path)
+                record['all'].update(it)
+                record['external'][domain] += it.count()
+
+            # Phase 2: absolute links to other articles
+            logging.info("Absolute links for %d in %s", doc_id, domain)
+
+            for link in doc.absolute_links:
+                if link.domain_id == article.domain_id:
+                    path = link.path.partition('#')[0]
+                    it   = self._session.query(Article).filter_by(domain_id = article.domain_id, path = path)
+                    record['all'].update(it)
+                    record['external'][domain] += it.count()
+                    continue
+                record['external'].update([link.domain])
+            word_forms = {}
+            # Phase 3: Key terms
+            logging.info("Resolving key terms for %d in %s", doc_id, domain)
+            for kwad in doc.keyword_adjacencies:
+                word1, word2 = [x.lower() for x in [kwad.key1, kwad.key2]]
+                if word1 in word_forms:
+                    form = word_forms[word1]
+                    form.append(word2)
+                    word_forms.pop(word1, None)
+                    word_forms[word2] = form
+                else:
+                    word_forms[word2] = [word1, word2]
+
+            record['keywords'].update([' '.join(word_forms[w]) for w in word_forms])
+
+
+        for domain in ret:
+            logging.info("Computing overall statistics for %s", domain)
+            src = ret[domain]
+
+            # Compute coverage information 
+            src['coverage'] = 100.0*len(src['known'] - src['all'])/len(src['all'])
+            src.pop('known', None)
+            src.pop('all', None)
+
+            # Compute a sample of keyterms
+            src['keywords'] = [k for k,c in random.sample(src['keywords'].most_common(50), 15)]
+
+            # Find out what gets linked to, 5 categories excluding 'other'
+            new_summary = {}
+            for dm, count in src['external'].most_common(5):
+                dmkey = dm.key 
+                new_summary[dmkey] = count 
+            others = 0
+            for dm in src['external']:
+                dmkey = dm.key 
+                if dmkey not in new_summary:
+                    others += 1
+            new_summary['others'] = 1
+            src['external'] = new_summary
+
+        return ret 
+
     def present(self, query_time):
         import json
+        self.response['aux'] = self.additional()
         self.info['query_time'] = round(query_time, 2)
         print json.dumps(self.response, indent = 4)
 
@@ -455,8 +537,9 @@ class QueryProcessor(object):
             self.keywords.add(keyword)
             self.keywords.update(self.kwstack.resolve(keyword))
 
-        self.presenter = self.presenter(self.keywords, self.query_text)
-        for row in self.kdproc.get_document_rows(self.keywords, self.domains):
+        self.presenter = self.presenter(self.keywords, self.query_text, self._engine)
+        dmset = set([])
+        for row in self.kdproc.get_document_rows(self.keywords, self.domains, dmset):
             self.presenter.add_result(*row)
 
         self.presenter.present(time.time() - start_time)
