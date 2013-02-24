@@ -305,7 +305,7 @@ class KDQueryProcessor(object):
                 for raw in keywords:
                     k = keywords[raw]
                     if self._ka_res.resolve(k,d):
-                        dset.add(d, raw_domain)
+                        dset.add((d, raw_domain))
                         break 
 
         for d, raw_domain in dset:
