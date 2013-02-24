@@ -13,18 +13,72 @@ from sqlalchemy.orm import *
 from backend.db import UserQuery, UserQueryKeywordRecord, UserQueryDomainRecord, UserQueryArticleRecord
 from backend.db import Keyword, Domain, KeywordAdjacency, Article, Document, KeywordIncidence, Sentence, Phrase
 
+from boto.s3.connection import S3Connection
+from boto.s3.key import Key
 import boto.s3
 import boto.sqs 
+from boto.ses.connection import SESConnection
+
+from sqlalchemy.sql.functions import now
+
+from boto.s3.key import Key
 from boto.sqs.message import Message
+SQS_REGION = "us-east-1"
 
 import redis
-
+FOOTER = """
+Sentimentron has removed your email from its database.
+--
+Copyright &copy; 2012 Richard Townsend. Sentimentron is a research project, results are automatically generated and may not be accurate. 
+<a href=\"http://www.sentimentron.co.uk/terms.html\">Terms of use</a>"""
 QUERY_QUEUE_NAME = "query-queue"
 
 def prepare_date(input_date):
     start = datetime.datetime(year=1970,month=1,day=1)
     diff = input_date - start
     return int(diff.total_seconds()*1000)
+
+class EmailProcessor(object):
+
+    def __init__(self):
+        self.con = SESConnection()
+
+    def send_success(self, to, id):
+        msg = """Hello! This is an automated email from Sentimentron.
+
+Sentimentron's finished processing your request and has produced some results. 
+To view them, copy the following into your browser:
+
+    <ul style="list-style-type:none"><li><a href="http://results.sentimentron.co.uk/index.html#%d">http://results.sentimentron.co.uk/index.html#%d</a></li></ul>
+
+Hope you find the results useful! If you have any questions or feedback, please email <a href="mailto:feeback@sentimentron.co.uk">feedback@sentimentron.co.uk</a>.""" % (id, id)
+    
+        self.con.send_email("no-reply@sentimentron.co.uk", 
+            "Good news from Sentimentron",
+            msg + FOOTER,
+            [to], None, None, 'html'
+        )
+
+    def send_failure(self, to, error):
+        msg = """Hello! This is an automated email from Sentimentron.
+
+Unfortunately, Sentimentron encountered a problem processing your query and
+hasn't produced any results. Apologies for the inconvenience. The problem was:
+
+    <ul style="list-style-type:none; font-weight:bold"><li>%s</li></ul>
+
+If you have any questions or feedback, please email <a href="mailto:feeback@sentimentron.co.uk">feedback@sentimentron.co.uk</a>.""" % (error,)
+
+        self.con.send_email('no-reply@sentimentron.co.uk', 
+            'Bad news from Sentimentron',
+            msg + FOOTER,
+            [to], None, None, 'html'
+        )
+
+class QueryException(Exception):
+
+    def __init__(self, message):
+        self.message = message
 
 class QueryQueue(object):
 
@@ -34,16 +88,16 @@ class QueryQueue(object):
         self.queue_name = QUERY_QUEUE_NAME
         logging.info("Using '%s' as the queue.", self.queue_name)
         self._conn  = boto.sqs.connect_to_region(SQS_REGION)
-        self._queue = self._conn.lookup(queue_name)
+        self._queue = self._conn.lookup(QUERY_QUEUE_NAME)
         if self._queue is None:
-            logging.info("Creating '%s'...", (queue_name,))
-            self._queue = self._conn.create_queue(queue_name, 120)
+            logging.info("Creating '%s'...", (QUERY_QUEUE_NAME,))
+            self._queue = self._conn.create_queue(QUERY_QUEUE_NAME, 120)
 
         logging.info("Connection established.")
 
     def __iter__(self):
         while 1:
-            rs = sel._queue.get_messages()
+            rs = self._queue.get_messages()
             for item in rs:
                 iden = int(item.get_body())
                 self._messages[iden] = item 
@@ -421,6 +475,7 @@ class JSONResultPresenter(ResultPresenter):
         self.dset.add(id)
 
         # Misc record 
+        info = self.info
         info['sentences_returned'] += pos_sentences + neg_sentences
         info['phrases_returned'  ] += pos_phrases   + neg_phrases
         info['documents_returned'] += 1
@@ -479,7 +534,7 @@ class JSONResultPresenter(ResultPresenter):
             src = ret[domain]
 
             # Compute coverage information 
-            src['coverage'] = 100.0*len(src['known'] - src['all'])/len(src['all'])
+            src['coverage'] = round(100.0*len(src['known'] - src['all'])/len(src['all']))
             src.pop('known', None)
             src.pop('all', None)
 
@@ -496,6 +551,7 @@ class JSONResultPresenter(ResultPresenter):
                 dmkey = dm.key 
                 if dmkey not in new_summary:
                     others += 1
+
             new_summary['others'] = 1
             src['external'] = new_summary
 
@@ -505,7 +561,26 @@ class JSONResultPresenter(ResultPresenter):
         import json
         self.response['aux'] = self.additional()
         self.info['query_time'] = round(query_time, 2)
-        print json.dumps(self.response, indent = 4)
+        return json.dumps(self.response, indent = 4)
+
+class S3JSONResultPresenter(JSONResultPresenter):
+
+    def __init__(self, keywords, query_text, engine):
+        super(S3JSONResultPresenter, self).__init__(keywords, query_text, engine)
+        self.query = self._session.query(UserQuery).filter_by(text = query_text).one()
+
+    def present(self, query_time):
+        response = super(S3JSONResultPresenter, self).present(query_time)
+        connection = S3Connection()
+        bucket = connection.get_bucket('results.sentimentron.co.uk')
+        key = Key(bucket)
+        key.key = str(self.query.id)
+        key.set_contents_from_string(response)
+
+        self.query.fulfilled = now()
+        self._session.commit()
+
+
 
 class QueryProcessor(object):
 
@@ -527,11 +602,11 @@ class QueryProcessor(object):
         import time 
 
         start_time = time.time()
-        for domain in self.uq.get_domains(query):
+        for domain in self.uq.get_domains(self.query_text):
             self.domains.add(domain)
             self.domains.update(self.fd.resolve(domain))
 
-        for keyword in self.uq.get_keywords(query):
+        for keyword in self.uq.get_keywords(self.query_text):
             if keyword is None:
                 continue
             self.keywords.add(keyword)
@@ -559,6 +634,24 @@ if __name__ == "__main__":
         uq    = UserQuery(query)
         qp    = QueryProcessor(uq, engine, JSONResultPresenter)
         qp.execute()
+    else:
+        qq = QueryQueue(engine)
+        session = Session(bind = engine)
+        for uq_id in qq:
+            uq = session.query(UserQuery).get(uq_id)
+            qp = QueryProcessor(uq, engine, S3JSONResultPresenter)
+            pm = EmailProcessor()
+            try:
+                qp.execute()
+                if uq.email is not None:
+                    uq.send_success(uq.email, uq.id)
+            except QueryException as ex:
+                if uq.email is not None:
+                    uq.send_failure(uq.email, ex.message)
+                else:
+                    uq.status_text = ex.message
+            qq.set_completed(uq_id)
+
 
         #keywords, domains, dmap, dset, dates, phrases, relevance = kdproc.process(keywords, domains)
         #result = present(keywords, len(keywords)> 0, domains, dmap, dset, dates, phrases, relevance, query)
