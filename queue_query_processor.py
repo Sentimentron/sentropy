@@ -296,8 +296,7 @@ class KDQueryProcessor(object):
         for raw in domains:
             domains = list(self._d_res.resolve(domains[raw]))
             dmset.update(domains)
-            logging.debug((dmset, d))
-
+            
         # Construct the final documents set
         if len(keywords) == 0:
             dset = dmset 
