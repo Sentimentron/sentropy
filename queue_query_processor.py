@@ -263,7 +263,7 @@ class PhraseRelevanceResolutionService(DatabaseResolutionService):
         sql = """SELECT keyword_id 
         FROM keyword_incidences 
         WHERE phrase_id = (:id)"""
-        for _id in self._session.execute(sql, {'id': phrase_id}):
+        for _id, in self._session.execute(sql, {'id': phrase_id}):
             if _id in keyword_set:
                 return True 
         return False
@@ -294,8 +294,8 @@ class KDQueryProcessor(object):
 
         # Construct the domains set 
         for raw in domains:
-            domains = list(self._d_res.resolve(domains[raw]))
-            dmset.update(domains)
+            d = list(self._d_res.resolve(domains[raw]))
+            dmset.update(d)
             
         # Construct the final documents set
         if len(keywords) == 0:
