@@ -369,7 +369,7 @@ class JSONResultPresenter(ResultPresenter):
         info['keywords_set'      ] = list(keywords)
 
         self.info     = info
-        self.response = {'info': info}
+        self.response = {'info': info, 'docs': {}}
 
     @classmethod 
     def convert_doc_label(cls, label):
@@ -385,19 +385,40 @@ class JSONResultPresenter(ResultPresenter):
         diff  = in_date - start
         return int(diff.total_seconds() * 1000)
 
+    @classmethod
+    def convert_method(cls, method):
+        ret = -1
+        if method == "Certain":
+            ret = 0
+        elif method == "Uncertain":
+            ret = 1
+        elif method == "Crawled":
+            ret = 2
+
+        if ret == -1:
+            raise ValueError(method)
+
+        return ret
+
     def add_result(self, id, domain, method, date, pos_phrases, neg_phrases, pos_sentences, neg_sentences, relevant_pos, relevant_neg, label, phrase_prob):
         # Add new domain if needed
         if domain not in self.response:
-            self.response[domain] = []
+            self.response['docs'][domain] = []
 
         # Result presentation
         label       = self.convert_doc_label(label)
         date        = self.convert_date(date)
         phrase_prob = round(phrase_prob, 2)
+        method      = self.convert_method(method)
 
         # Domain record 
         record = self.response[domain]
         record.append([method, date, pos_phrases, neg_phrases, pos_sentences, neg_sentences, relevant_pos, relevant_neg, label, phrase_prob])
+
+        # Misc record 
+        info['sentences_returned'] += pos_sentences + neg_sentences
+        info['phrases_returned'  ] += pos_phrases   + neg_phrases
+        info['documents_returned'] += 1
 
     def present(self, query_time):
         import json
