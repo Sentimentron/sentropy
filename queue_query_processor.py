@@ -641,12 +641,13 @@ if __name__ == "__main__":
             try:
                 qp.execute()
                 if uq.email is not None:
-                    uq.send_success(uq.email, uq.id)
+                    pm.send_success(uq.email, uq.id)
             except QueryException as ex:
                 if uq.email is not None:
-                    uq.send_failure(uq.email, ex.message)
+                    pm.send_failure(uq.email, ex.message)
                 else:
                     uq.status_text = ex.message
+                    session.commit()
             qq.set_completed(uq_id)
 
 
