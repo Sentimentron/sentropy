@@ -423,7 +423,7 @@ class JSONResultPresenter(ResultPresenter):
         info['keywords_set'      ] = list(keywords)
 
         self.info     = info
-        self.response = {'info': info, 'docs': {}}
+        self.response = {'info': info, 'siteData': {}}
         self.dset     = set([])
 
         self._session = Session(bind = engine)
@@ -459,8 +459,8 @@ class JSONResultPresenter(ResultPresenter):
 
     def add_result(self, id, domain, method, date, pos_phrases, neg_phrases, pos_sentences, neg_sentences, relevant_pos, relevant_neg, label, phrase_prob):
         # Add new domain if needed
-        if domain not in self.response:
-            self.response[domain] = {'docs': [], 'details': {}}
+        if domain not in self.response['siteData']:
+            self.response['siteData'][domain] = {'docs': [], 'details': {}}
 
         # Result presentation
         label       = self.convert_doc_label(label)
@@ -469,16 +469,15 @@ class JSONResultPresenter(ResultPresenter):
         method      = self.convert_method(method)
 
         # Domain record 
-        record = self.response[domain]['docs']
+        record = self.response['siteData'][domain]['docs']
         record.append([method, date, pos_phrases, neg_phrases, pos_sentences, neg_sentences, relevant_pos, relevant_neg, label, phrase_prob, id])
 
-        self.dset.add(id)
+        self.dset.add((id, domain))
 
         # Misc record 
-        info = self.info
-        info['sentences_returned'] += pos_sentences + neg_sentences
-        info['phrases_returned'  ] += pos_phrases   + neg_phrases
-        info['documents_returned'] += 1
+        self.info['sentences_returned'] += pos_sentences + neg_sentences
+        self.info['phrases_returned'  ] += pos_phrases   + neg_phrases
+        self.info['documents_returned'] += 1
 
     def additional(self):
         from collections import Counter
@@ -512,12 +511,12 @@ class JSONResultPresenter(ResultPresenter):
                     record['all'].update(it)
                     record['external'][domain] += it.count()
                     continue
-                record['external'].update([link.domain])
+                record['external'].update([link.domain.key])
             word_forms = {}
             # Phase 3: Key terms
             logging.info("Resolving key terms for %d in %s", doc_id, domain)
             for kwad in doc.keyword_adjacencies:
-                word1, word2 = [x.lower() for x in [kwad.key1, kwad.key2]]
+                word1, word2 = [x.lower() for x in [kwad.key1.word, kwad.key2.word]]
                 if word1 in word_forms:
                     form = word_forms[word1]
                     form.append(word2)
@@ -534,7 +533,7 @@ class JSONResultPresenter(ResultPresenter):
             src = ret[domain]
 
             # Compute coverage information 
-            src['coverage'] = round(100.0*len(src['known'] - src['all'])/len(src['all']))
+            src['coverage'] = round(100.0*len(src['known'] - src['all'])/len(src['all'] | src['known']))
             src.pop('known', None)
             src.pop('all', None)
 
@@ -543,12 +542,10 @@ class JSONResultPresenter(ResultPresenter):
 
             # Find out what gets linked to, 5 categories excluding 'other'
             new_summary = {}
-            for dm, count in src['external'].most_common(5):
-                dmkey = dm.key 
+            for dmkey, count in src['external'].most_common(5):
                 new_summary[dmkey] = count 
             others = 0
-            for dm in src['external']:
-                dmkey = dm.key 
+            for dmkey in src['external']:
                 if dmkey not in new_summary:
                     others += 1
 
