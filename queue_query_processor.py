@@ -20,6 +20,11 @@ import redis
 
 QUERY_QUEUE_NAME = "query-queue"
 
+def prepare_date(input_date):
+    start = datetime.datetime(year=1970,month=1,day=1)
+    diff = input_date - start
+    return int(diff.total_seconds()*1000)
+
 class QueryQueue(object):
 
     def __init__(self, engine):
@@ -191,7 +196,14 @@ class DomainIDResolutionService(RedisResolutionService):
      def __init__(self):
         super(DomainIDResolutionService, self).__init__(core.get_redis_host(), 6379, 2)
 
-class CrawledDateResolutionService(DatabaseResolutionService):
+class DateResolutionService(DatabaseResolutionService):
+    @classmethod 
+    def prepare_date(cls, input_date):
+        start = datetime.datetime(year=1970,month=1,day=1)
+        diff = input_date - start
+        return int(diff.total_seconds()*1000)
+
+class CrawledDateResolutionService(DateResolutionService):
 
     def resolve(self, doc_id):
         sql = """SELECT articles.crawled 
@@ -202,7 +214,7 @@ class CrawledDateResolutionService(DatabaseResolutionService):
         for date, in self._session.execute(sql, {'id': doc_id}):
             return "Crawled", date 
 
-class CertainDateResolutionService(DatabaseResolutionService):
+class CertainDateResolutionService(DateResolutionService):
 
     def resolve(self, doc_id):
         sql = """SELECT certain_dates.date 
@@ -214,7 +226,7 @@ class CertainDateResolutionService(DatabaseResolutionService):
         for date, in self._session.execute(sql, {'id': doc_id}):
             return "Certain", date 
 
-class UncertainDateResolutionService(DatabaseResolutionService):
+class UncertainDateResolutionService(DateResolutionService):
 
     def resolve(self, doc_id):
         sql = """SELECT uncertain_dates.date
@@ -306,6 +318,7 @@ class KDQueryProcessor(object):
 
             logging.info("%d Searching for publication dates...", d)
             method, date = self._date_res.resolve(d)
+            date = DateResolutionService.present_date(date)
 
             logging.info("%d Resolving phrases...")
             pos, neg = 0, 0
