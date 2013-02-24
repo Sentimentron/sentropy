@@ -289,16 +289,13 @@ class KDQueryProcessor(object):
         kwset, dmset, dset = set([]), set([]), set([])
 
         # Map keywords and domains to identifiers
-        keywords = [(k, self._kres.resolve(k)) for k in keywords]
-        domains  = [(d, self._dres.resolve(d)) for d in domains]
-
-        dm_map = {}
+        keywords = {k : self._kres.resolve(k) for k in keywords}
+        domains  = {d : self._dres.resolve(d) for d in domains}
 
         # Construct the domains set 
-        for raw, d in domains:
-            domains = list(self._d_res.resolve(d))
+        for raw in domains:
+            domains = list(self._d_res.resolve(domains[raw]))
             dmset.update(domains)
-            dm_map[d] = domains
             logging.debug((dmset, d))
 
         # Construct the final documents set
@@ -306,10 +303,10 @@ class KDQueryProcessor(object):
             dset = dmset 
         else:
             for d in dmset:
-                for raw, k in keywords:
+                for raw in keywords:
+                    k = keywords[raw]
                     if self._ka_res.resolve(k,d):
                         dset.add(d)
-        
                         break 
 
         for d in dset:
@@ -318,7 +315,6 @@ class KDQueryProcessor(object):
 
             logging.info("%d Searching for publication dates...", d)
             method, date = self._date_res.resolve(d)
-            date = DateResolutionService.present_date(date)
 
             logging.info("%d Resolving phrases...")
             pos, neg = 0, 0
