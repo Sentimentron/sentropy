@@ -403,7 +403,7 @@ class JSONResultPresenter(ResultPresenter):
     def add_result(self, id, domain, method, date, pos_phrases, neg_phrases, pos_sentences, neg_sentences, relevant_pos, relevant_neg, label, phrase_prob):
         # Add new domain if needed
         if domain not in self.response:
-            self.response['docs'][domain] = []
+            self.response[domain] = {'docs': [], 'details': {}}
 
         # Result presentation
         label       = self.convert_doc_label(label)
@@ -412,7 +412,7 @@ class JSONResultPresenter(ResultPresenter):
         method      = self.convert_method(method)
 
         # Domain record 
-        record = self.response[domain]
+        record = self.response[domain]['docs']
         record.append([method, date, pos_phrases, neg_phrases, pos_sentences, neg_sentences, relevant_pos, relevant_neg, label, phrase_prob, id])
 
         # Misc record 
@@ -423,7 +423,7 @@ class JSONResultPresenter(ResultPresenter):
     def present(self, query_time):
         import json
         self.info['query_time'] = round(query_time, 2)
-        print json.dumps(self.response)
+        print json.dumps(self.response, indent = 4)
 
 class QueryProcessor(object):
 
