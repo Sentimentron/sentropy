@@ -305,7 +305,7 @@ class KDQueryProcessor(object):
                 for raw in keywords:
                     k = keywords[raw]
                     if self._ka_res.resolve(k,d):
-                        dset.add(d, raw_domain)
+                        dset.add((d, raw_domain))
                         break 
 
         for d, raw_domain in dset:
@@ -320,8 +320,11 @@ class KDQueryProcessor(object):
             relevant_pos, relevant_neg = 0, 0
             phrases = self._phrase_res.resolve(d)
 
-            for p in phrases:
+            phrase_prob_total, phrase_count = 0, 0
 
+            for p in phrases:
+                phrase_count += 1
+                phrase_prob_total += p.prob
                 if self._phrase_res_rel.resolve(p.id, keywords):
                     if p.label == "Positive":
                         relevant_pos += 1
@@ -330,45 +333,105 @@ class KDQueryProcessor(object):
 
             yield [
                 doc.id, raw_domain, method, date, 
-                doc.pos_phrases, doc.neg_phrases, doc.pos_phrases, doc.pos_sentences, 
-                doc.neg_sentences, relevant_pos, relevant_neg
+                doc.pos_phrases, doc.neg_phrases, doc.pos_sentences, 
+                doc.neg_sentences, relevant_pos, relevant_neg,
+                doc.label, phrase_prob_total
             ]
 
 
-def present(keywords, using_keywords, domains, dmap, dset, dates, phrases, relevance, query_text):
+class ResultPresenter(object):
 
-    import csv
-    import StringIO
+    def __init__(self, keywords, query_text):
+        self.keywords = keywords
+        self.query_text = query_text
 
-    ret = {}
-    info = {}
-    info['query_time'] = 0
-    info['keywords_returned'] = len(keywords)
-    info['result_version'] = 2
-    info['using_keywords'] = int(len(keywords)>0)
-    info['documents_returned'] = len(dset)
-    info['domains_returned'] = len(dmap)
-    info['query_text'] = query_text
-    info['domains'] = dmap 
-    info['phrases_returned'] = len(phrases)
-    info['keyword_set'] = [raw for raw, k in keywords]
+    def add_result(self, id, domain, method, date, pos_phrases, neg_phrases, pos_sentences, neg_sentences, relevant_pos, relevant_neg, label, phrase_prob):
+        pass 
 
-    overview = {}
+    def present(self):
+        pass 
 
-    fp = StringIO.StringIO()
-    wr = csv.writer(fp)
+class JSONResultPresenter(ResultPresenter):
 
-    for doc in dset:
-        method, date = dates[doc.id]
-        pos_rel_phrases = len([d for d in relevance[doc.id] if d.label == "Positive"])
-        neg_rel_phrases = len([d for d in relevance[doc.id] if d.label == "Negative"])
-        prob_phrases = 0
-        yield [doc.id, method, date, 
-            doc.pos_phrases, doc.neg_phrases, doc.pos_phrases, doc.pos_sentences, 
-            doc.neg_sentences, pos_rel_phrases, neg_rel_phrases
-        ]
+    def __init__(self, keywords, query_text):
+        super(JSONResultPresenter, self).__init__(keywords, query_text)
 
+        info                       = {}
+        info['keywords_returned' ] = len(keywords)
+        info['result_version'    ] = 2
+        info['using_keywords'    ] = int(len(keywords)>0)
+        info['documents_returned'] = 0
+        info['query_text'        ] = self.query_text
+        info['phrases_returned'  ] = 0
+        info['sentences_returned'] = 0
+        info['documents_returned'] = 0
+        info['keywords_set'      ] = list(keywords)
 
+        self.info     = info
+        self.response = {'info': info}
+
+    @classmethod 
+    def convert_doc_label(cls, label):
+        if label == "Negative":
+            return -1
+        elif label == "Positive":
+            return 1
+        return 0
+
+    def add_result(self, id, domain, method, date, pos_phrases, neg_phrases, pos_sentences, neg_sentences, relevant_pos, relevant_neg, label, phrase_prob):
+        # Add new domain if needed
+        if domain not in self.response:
+            self.response[domain] = []
+
+        # Result presentation
+        label       = self.convert_doc_label(label)
+        date        = self.convert_date(date)
+        phrase_prob = round(phrase_prob, 2)
+
+        # Domain record 
+        record = self.response[domain]
+        record.append([method, date, pos_phrases, neg_phrases, pos_sentences, neg_sentences, relevant_pos, relevant_neg, label, phrase_prob])
+
+    def present(self, query_time):
+        import json
+        self.info['query_time'] = round(query_time, 2)
+        print json.dumps(self.response)
+
+class QueryProcessor(object):
+
+    def __init__(self, uq, engine, presenter):
+
+        self.domains    = set([])
+        self.keywords   = set([])
+        self.presenter  = presenter
+        self.query_text = uq.text
+        self._engine = engine
+
+        self.uq      = uq 
+
+        self.kdproc  = KDQueryProcessor(self._engine)
+        self.fd      = FuzzyDomainResolutionService(self._engine)
+        self.kwstack = MetaComboResolutionService([k(self._engine, None) for k in [FuzzyKeywordCaseResolutionService]])
+
+    def execute(self):
+        import time 
+
+        start_time = time.time()
+        for domain in self.uq.get_domains(query):
+            self.domains.add(domain)
+            self.domains.update(self.fd.resolve(domain))
+
+        for keyword in self.uq.get_keywords(query):
+            if keyword is None:
+                continue
+            self.keywords.add(keyword)
+            self.keywords.update(self.kwstack.resolve(keyword))
+
+        self.presenter = self.presenter(self.keywords, self.query_text)
+        for row in self.kdproc.get_document_rows(self.keywords, self.domains):
+            self.presenter.add_result(*row)
+
+        self.presenter.present(time.time() - start_time)
 
 if __name__ == "__main__":
     core.configure_logging('debug')
@@ -383,22 +446,8 @@ if __name__ == "__main__":
     if "--cli" in sys.argv:
         query = raw_input("Enter query:")
         uq    = UserQuery(query)
-        domains = set([])
-        keywords = set([])
-        for domain in uq.get_domains(query):
-            domains.add(domain)
-            domains.update(fd.resolve(domain))
-            logging.info((domain, domains))
-
-        for keyword in uq.get_keywords(query):
-            keywords.add(keyword)
-            keywords.update(kwstack.resolve(keyword))
-            logging.info((keyword, keywords))
-
-        import csv 
-        writer = csv.writer(open('sample.csv', 'w'))
-        for row in kdproc.get_document_rows(keywords, domains):
-            writer.writerow(row)
+        qp    = QueryProcessor(uq, engine, JSONResultPresenter)
+        qp.execute()
 
         #keywords, domains, dmap, dset, dates, phrases, relevance = kdproc.process(keywords, domains)
         #result = present(keywords, len(keywords)> 0, domains, dmap, dset, dates, phrases, relevance, query)
