@@ -416,9 +416,9 @@ class JSONResultPresenter(ResultPresenter):
         record.append([method, date, pos_phrases, neg_phrases, pos_sentences, neg_sentences, relevant_pos, relevant_neg, label, phrase_prob])
 
         # Misc record 
-        info['sentences_returned'] += pos_sentences + neg_sentences
-        info['phrases_returned'  ] += pos_phrases   + neg_phrases
-        info['documents_returned'] += 1
+        self.info['sentences_returned'] += pos_sentences + neg_sentences
+        self.info['phrases_returned'  ] += pos_phrases   + neg_phrases
+        self.info['documents_returned'] += 1
 
     def present(self, query_time):
         import json
