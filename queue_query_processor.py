@@ -378,7 +378,7 @@ class KDQueryProcessor(object):
                 if self._ska_res.resolve(key1, key2, d):
                     added = True 
                     logging.debug((key1, key2, d))
-                    dset.add(d) 
+                    dset.add((d, raw_domain)) 
                     break
             if added:
                 continue
