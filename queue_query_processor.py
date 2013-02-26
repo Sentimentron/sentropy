@@ -571,7 +571,7 @@ class S3JSONResultPresenter(JSONResultPresenter):
         connection = S3Connection()
         bucket = connection.get_bucket('results.sentimentron.co.uk')
         key = Key(bucket)
-        key.key = str(self.query.id)
+        key.key = 'results/'+str(self.query.id)
         key.set_contents_from_string(response)
 
         self.query.fulfilled = now()
