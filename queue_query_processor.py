@@ -226,6 +226,19 @@ class KeywordAdjacencyResolutionService(DatabaseResolutionService):
             return True 
         return False
 
+class StrictKeywordAdjacencyResolutionService(DatabaseResolutionService):
+
+    def resolve(self, key1_id, key2_id, document_id):
+        sql = """SELECT DISTINCT doc_id 
+        FROM keyword_adjacencies
+        WHERE (key1_id = (:id1) AND key2_id = (:id2))
+        AND doc_id = (:doc)"""
+
+        logging.debug(("StrictKeywordAdj", key1_id, key2_id, document_id))
+        for _id in self._session.execute(sql, {'id1': key1_id, 'id2':key2_id, 'doc':document_id}):
+            return True 
+        return False 
+
 class RedisResolutionService(ResolutionService):
 
     def __init__(self, host, port, db):
@@ -334,34 +347,54 @@ class KDQueryProcessor(object):
         self._d_res = DocumentDomainResolutionService(self._engine)
         self._k_res = DocumentKeywordResolutionService(self._engine)
         self._ka_res= KeywordAdjacencyResolutionService(self._engine)
+        self._ska_res = StrictKeywordAdjacencyResolutionService(self._engine)
 
         self._date_res   = DateResolutionService(engine)
         self._phrase_res = PhraseResolutionService(engine)
         self._phrase_res_rel = PhraseRelevanceResolutionService(engine)
 
     def get_document_rows(self, keywords, domains, dmset = set([])):
-
+        import itertools
+        using_bigrams = False
         kwset,  dset = set([]), set([])
 
         # Map keywords and domains to identifiers
         keywords = {k : self._kres.resolve(k) for k in keywords}
         domains  = {d : self._dres.resolve(d) for d in domains}
 
+        logging.debug(keywords); logging.debug(domains)
+
         # Construct the domains set 
         for raw in domains:
             domain_contents = list(self._d_res.resolve(domains[raw]))
             dmset.update([(d, raw) for d in domain_contents])
-            
-        # Construct the final documents set
-        if len(keywords) == 0:
-            dset = dmset 
-        else:
-            for d, raw_domain in dmset:
-                for raw in keywords:
-                    k = keywords[raw]
-                    if self._ka_res.resolve(k,d):
-                        dset.add((d, raw_domain))
-                        break 
+
+        # Generate list of possible keyword bigrams
+        bigram_gen = [(keywords[x], keywords[y]) for x, y in itertools.combinations(keywords, 2)]
+        logging.debug(bigram_gen)
+        for d, raw_domain in dmset: 
+            added = False 
+            for key1, key2 in bigram_gen:
+                if self._ska_res.resolve(key1, key2, d):
+                    added = True 
+                    logging.debug((key1, key2, d))
+                    dset.add(d) 
+                    break
+            if added:
+                continue
+
+        using_bigrams = len(dset) > 100
+        if not using_bigrams:
+            # Construct the final documents set
+            if len(keywords) == 0:
+                dset = dmset 
+            else:
+                for d, raw_domain in dmset:
+                    for raw in keywords:
+                        k = keywords[raw]
+                        if self._ka_res.resolve(k,d):
+                            dset.add((d, raw_domain))
+                            break 
 
         for d, raw_domain in dset:
             logging.info("%d Fetching document details", d)
