@@ -38,6 +38,14 @@ def prepare_date(input_date):
     diff = input_date - start
     return int(diff.total_seconds()*1000)
 
+class QueryMessage(object):
+
+    def __init__(self, message):
+        self.message = message 
+
+    def __str__(self):
+        return self.message 
+
 class EmailProcessor(object):
 
     def __init__(self):
@@ -362,11 +370,31 @@ class KDQueryProcessor(object):
         keywords = {k : self._kres.resolve(k) for k in keywords}
         domains  = {d : self._dres.resolve(d) for d in domains}
 
+        resolved = 0
+        for k in keywords:
+            if keywords[k] is None:
+                yield QueryMessage("Couldn't find any keywords matching '%s'" % (k,))
+            else:
+                resolved += 1
+        if resolved == 0:
+            raise QueryException("No matching keywords.")
+
+        resolved = 0
+        for d in domains:
+            if domains[d] is None:
+                yield QueryMessage("Couldn't find any domains matching '%s'" % (d,))
+            else:
+                resolved += 1
+        if resolved == 0:
+            raise QueryException("No matching domains.")
+
         logging.debug(keywords); logging.debug(domains)
 
         # Construct the domains set 
         for raw in domains:
             domain_contents = list(self._d_res.resolve(domains[raw]))
+            if len(domain_contents) == 0:
+                yield QueryMessage("No documents found for domain %s", (raw,))
             dmset.update([(d, raw) for d in domain_contents])
 
         # Generate list of possible keyword bigrams
@@ -385,6 +413,7 @@ class KDQueryProcessor(object):
 
         using_bigrams = len(dset) > 100
         if not using_bigrams:
+            yield QueryMessage("Few exact matches for this query. Expanding...")
             # Construct the final documents set
             if len(keywords) == 0:
                 dset = dmset 
@@ -396,6 +425,7 @@ class KDQueryProcessor(object):
                             dset.add((d, raw_domain))
                             break 
 
+        yield QueryMessage("Fetching document details...")
         for d, raw_domain in dset:
             logging.info("%d Fetching document details", d)
             doc = self._session.query(Document).get(d)
@@ -645,9 +675,12 @@ class QueryProcessor(object):
         self.presenter = self.presenter(self.keywords, self.query_text, self._engine)
         dmset = set([])
         for row in self.kdproc.get_document_rows(self.keywords, self.domains, dmset):
-            self.presenter.add_result(*row)
-
+            if type(row) is QueryMessage:
+                self.uq.message = str(row)
+            else:
+                self.presenter.add_result(*row)
         self.presenter.present(time.time() - start_time)
+
 
 if __name__ == "__main__":
     core.configure_logging('debug')
@@ -669,7 +702,7 @@ if __name__ == "__main__":
         session = Session(bind = engine)
         for uq_id in qq:
             uq = session.query(UserQuery).get(uq_id)
-            qp = QueryProcessor(uq, engine, S3JSONResultPresenter)
+            qp = QueryProcessor(uq, engine, session, S3JSONResultPresenter)
             pm = EmailProcessor()
             try:
                 qp.execute()
@@ -679,10 +712,7 @@ if __name__ == "__main__":
                 if uq.email is not None:
                     pm.send_failure(uq.email, ex.message)
                 else:
-                    uq.status_text = ex.message
+                    uq.message = ex.message
+                    uq.cancelled = True 
                     session.commit()
             qq.set_completed(uq_id)
-
-
-        #keywords, domains, dmap, dset, dates, phrases, relevance = kdproc.process(keywords, domains)
-        #result = present(keywords, len(keywords)> 0, domains, dmap, dset, dates, phrases, relevance, query)
