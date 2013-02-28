@@ -580,6 +580,8 @@ class JSONResultPresenter(ResultPresenter):
         for doc_id, domain in self.dset:
             if domain not in ret:
                 ret[domain] = {'external': Counter(), 'keywords': Counter([]), 'known': set([]), 'all': set([])}
+            else:
+                continue
             record = ret[domain]
             doc = self._session.query(Document).get(doc_id)
             article = doc.parent
