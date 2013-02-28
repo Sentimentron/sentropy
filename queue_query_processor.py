@@ -343,6 +343,36 @@ class PhraseRelevanceResolutionService(DatabaseResolutionService):
                 return True 
         return False
 
+class KQueryProcessor(object):
+
+    def __init__(self, engine):
+        self._kd_proc = KDQueryProcessor(engine)
+        self._kres = KeywordIDResolutionService()
+
+    def get_document_rows(self, keywords, domains=set([]), dmset = set([])):
+        # Create a new session
+        session = Session(bind = engine)
+
+        # Look up the article keywords
+        kres = KeywordIDResolutionService()
+        _keywords = {k : self._kres.resolve(k) for k in keywords}
+
+        # Find the sites which talk about a particular keyword 
+        sql = """ SELECT domains.`key`, COUNT(*) AS c from domains JOIN articles ON articles.domain_id = domains.id 
+            JOIN documents ON documents.article_id = articles.id 
+            JOIN keyword_adjacencies ON keyword_adjacencies.doc_id = documents.id 
+            WHERE keyword_adjacencies.key1_id IN (:keys)
+            OR keyword_adjacencies.key2_id IN (:keys)
+            GROUP BY domains.id 
+            ORDER BY c DESC 
+            LIMIT 0,5
+        """
+        for key, count in session.execute(sql, ({'keys': ','.join([str(i) for i in _keywords.values()])})):
+            logging.info((key, count))
+            domains.add(key)
+
+        return self._kd_proc.get_document_rows(keywords, domains, dmset)
+
 class KDQueryProcessor(object):
 
     def __init__(self, engine):
@@ -639,11 +669,9 @@ class S3JSONResultPresenter(JSONResultPresenter):
         self.query.fulfilled = now()
         self._session.commit()
 
-
-
 class QueryProcessor(object):
 
-    def __init__(self, uq, engine, presenter):
+    def __init__(self, uq, engine, uq_session, presenter):
 
         self.domains    = set([])
         self.keywords   = set([])
@@ -652,7 +680,9 @@ class QueryProcessor(object):
         self._engine = engine
 
         self.uq      = uq 
+        self._uq_session = uq_session
 
+        self.kproc   = KQueryProcessor(self._engine)
         self.kdproc  = KDQueryProcessor(self._engine)
         self.fd      = FuzzyDomainResolutionService(self._engine)
         self.kwstack = MetaComboResolutionService([k(self._engine, None) for k in [FuzzyKeywordCaseResolutionService]])
@@ -671,9 +701,15 @@ class QueryProcessor(object):
             self.keywords.add(keyword)
             self.keywords.update(self.kwstack.resolve(keyword))
 
+        processor = None 
+        if len(self.keywords) > 0 and len(self.domains) == 0:
+            processor = self.kproc
+        else:
+            processor = self.kdproc 
+
         self.presenter = self.presenter(self.keywords, self.query_text, self._engine)
         dmset = set([])
-        for row in self.kdproc.get_document_rows(self.keywords, self.domains, dmset):
+        for row in processor.get_document_rows(self.keywords, self.domains, dmset):
             if type(row) is QueryMessage:
                 self.uq.message = str(row)
                 try:
@@ -694,15 +730,15 @@ if __name__ == "__main__":
     kdproc  = KDQueryProcessor(engine)
     fd      = FuzzyDomainResolutionService(engine)
     kwstack = MetaComboResolutionService([k(engine, None) for k in [FuzzyKeywordCaseResolutionService]])
+    session = Session(bind = engine)
 
     if "--cli" in sys.argv:
         query = raw_input("Enter query:")
         uq    = UserQuery(query)
-        qp    = QueryProcessor(uq, engine, JSONResultPresenter)
+        qp    = QueryProcessor(uq, engine, session, JSONResultPresenter)
         qp.execute()
     else:
         qq = QueryQueue(engine)
-        session = Session(bind = engine)
         for uq_id in qq:
             uq = session.query(UserQuery).get(uq_id)
             qp = QueryProcessor(uq, engine, session, S3JSONResultPresenter)
