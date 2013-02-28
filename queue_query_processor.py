@@ -4,6 +4,7 @@ import logging
 import core
 import datetime 
 
+from sqlalchemy.pool import SingletonThreadPool
 from sqlalchemy import create_engine
 from sqlalchemy.exc import *
 from sqlalchemy.orm.session import Session 
@@ -725,7 +726,7 @@ if __name__ == "__main__":
     core.configure_logging('debug')
     engine = core.get_database_engine_string()
     logging.info("Using connection string '%s'" % (engine,))
-    engine = create_engine(engine, encoding='utf-8', isolation_level = 'READ UNCOMMITTED')
+    engine = create_engine(engine, encoding='utf-8', isolation_level = 'READ UNCOMMITTED', poolclass=SingletonThreadPool)
 
     kdproc  = KDQueryProcessor(engine)
     fd      = FuzzyDomainResolutionService(engine)
