@@ -744,6 +744,9 @@ if __name__ == "__main__":
         qq = QueryQueue(engine)
         for uq_id in qq:
             uq = session.query(UserQuery).get(uq_id)
+            if (uq.fulfilled - datetime.now()).days < 14:
+                logging.info("%s: Query already fulfilled in the last 14 days", uq)
+                continue 
             qp = QueryProcessor(uq, engine, session, S3JSONResultPresenter)
             pm = EmailProcessor()
             try:
