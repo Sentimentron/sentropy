@@ -20,7 +20,6 @@ import boto.sqs
 from boto.ses.connection import SESConnection
 
 from sqlalchemy.sql.functions import now
-
 from boto.s3.key import Key
 from boto.sqs.message import Message
 SQS_REGION = "us-east-1"
@@ -677,6 +676,10 @@ class QueryProcessor(object):
         for row in self.kdproc.get_document_rows(self.keywords, self.domains, dmset):
             if type(row) is QueryMessage:
                 self.uq.message = str(row)
+                try:
+                    self._uq_session.commit()
+                except Exception as ex:
+                    logging.error(("Unable to update query status!", row, uq))
             else:
                 self.presenter.add_result(*row)
         self.presenter.present(time.time() - start_time)
