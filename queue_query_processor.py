@@ -143,6 +143,8 @@ class FuzzyDomainResolutionService(DatabaseResolutionService):
 
 class FuzzyKeywordResolutionService(DatabaseResolutionService):
 
+    _query_format = None
+
     def __init__(self, engine, query_format=None):
         super(FuzzyKeywordResolutionService, self).__init__(engine)
         if query_format is not None:
