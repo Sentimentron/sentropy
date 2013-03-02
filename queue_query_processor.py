@@ -369,6 +369,14 @@ class KQueryProcessor(object):
         # Look up the article keywords
         kres = KeywordIDResolutionService()
         _keywords = {k : self._kres.resolve(k) for k in keywords}
+        resolved = 0
+        for k in _keywords:
+            if _keywords[k] is None:
+                yield QueryMessage("No matching keyword: %s", k)
+            else:
+                resolved += 1
+        if resolved == 0:
+            raise QueryException("No matching keywords.")
 
         # Find the sites which talk about a particular keyword 
         sql = """ SELECT domains.`key`, COUNT(*) AS c from domains JOIN articles ON articles.domain_id = domains.id 
