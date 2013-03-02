@@ -739,7 +739,7 @@ if __name__ == "__main__":
     core.configure_logging()
     engine = core.get_database_engine_string()
     logging.info("Using connection string '%s'" % (engine,))
-    engine = create_engine(engine, encoding='utf-8', isolation_level = 'READ UNCOMMITTED', poolclass=SingletonThreadPool)
+    engine = create_engine(engine, encoding='utf-8', isolation_level = 'READ UNCOMMITTED', poolclass=SingletonThreadPool, echo = True)
 
     kdproc  = KDQueryProcessor(engine)
     fd      = FuzzyDomainResolutionService(engine)
