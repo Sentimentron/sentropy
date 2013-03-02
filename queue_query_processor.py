@@ -709,7 +709,7 @@ class QueryProcessor(object):
         self.kdproc  = KDQueryProcessor(self._engine)
         self.fd      = FuzzyDomainResolutionService(self._engine)
         self.kwstack = MetaComboResolutionService([k(self._engine, None) for k in [FuzzyKeywordCaseResolutionService]])
-        self.kwstack = FuzzyKeywordResolutionService(self._engine)
+        self.kwstack = FuzzyKeywordComboResolutionService(self._engine)
 
     def execute(self):
         import time 
