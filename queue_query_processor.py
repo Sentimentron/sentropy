@@ -188,6 +188,16 @@ class MetaComboResolutionService(MetaResolutionService):
 
         return ret 
 
+class FuzzyKeywordComboResolutionService(MetaComboResolutionService):
+
+    def __init__(self, enigine):
+        self.engines = []
+        for k in [FuzzyKeywordCaseResolutionService, 
+            FuzzyKeywordLeftSpaceResolutionService,
+            FuzzyKeywordRightSpaceResolutionService,
+            FuzzyKeywordBothSpaceResolutionService]:
+            self.engines.append(k(engine))
+
 class MetaStackingResolutionService(MetaResolutionService):
 
     def resolve(self, something):
@@ -349,6 +359,7 @@ class KQueryProcessor(object):
     def __init__(self, engine):
         self._kd_proc = KDQueryProcessor(engine)
         self._kres = KeywordIDResolutionService()
+        self._pre_kres = FuzzyKeywordResolutionService()
 
     def get_document_rows(self, keywords, domains=set([]), dmset = set([])):
         # Create a new session
