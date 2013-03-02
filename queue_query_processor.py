@@ -450,18 +450,19 @@ class KDQueryProcessor(object):
             dmset.update([(d, raw) for d in domain_contents])
 
         # Generate list of possible keyword bigrams
-        bigram_gen = [(keywords[x], keywords[y]) for x, y in itertools.combinations(keywords, 2)]
-        logging.debug(bigram_gen)
-        for d, raw_domain in dmset: 
-            added = False 
-            for key1, key2 in bigram_gen:
-                if self._ska_res.resolve(key1, key2, d):
-                    added = True 
-                    logging.debug((key1, key2, d))
-                    dset.add((d, raw_domain)) 
-                    break
-            if added:
-                continue
+        if len(keywords) > 2:
+            bigram_gen = [(keywords[x], keywords[y]) for x, y in itertools.combinations(keywords, 2)]
+            logging.debug(bigram_gen)
+            for d, raw_domain in dmset: 
+                added = False 
+                for key1, key2 in bigram_gen:
+                    if self._ska_res.resolve(key1, key2, d):
+                        added = True 
+                        logging.debug((key1, key2, d))
+                        dset.add((d, raw_domain)) 
+                        break
+                if added:
+                    continue
 
         using_bigrams = len(dset) > 30
         if not using_bigrams:
@@ -477,6 +478,9 @@ class KDQueryProcessor(object):
                         if self._ka_res.resolve(k,d):
                             dset.add((d, raw_domain))
                             break 
+
+        if len(dset) == 0:
+            raise QueryException("No documents returned.")
 
         yield QueryMessage("Fetching document details...")
         last_percentage = None 
