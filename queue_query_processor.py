@@ -768,10 +768,10 @@ if __name__ == "__main__":
                     if uq.email is not None:
                         pm.send_success(uq.email, uq.id)
                 except QueryException as ex:
+                    logging.error(ex)
                     if uq.email is not None:
                         pm.send_failure(uq.email, ex.message)
-                    else:
-                        uq.message = ex.message
-                        uq.cancelled = True 
-                        session.commit()
+                    uq.message = ex.message
+                    uq.cancelled = True 
+                    session.commit()
             qq.set_completed(uq_id)
