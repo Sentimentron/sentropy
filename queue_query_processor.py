@@ -647,7 +647,10 @@ class JSONResultPresenter(ResultPresenter):
             others = 0
             for dmkey in src['external']:
                 if dmkey not in new_summary:
-                    others += 1
+                    if len(new_summary) < 5:
+                        new_summary[dm_key] = 1
+                    else:
+                        others += 1
 
             new_summary['others'] = 1
             src['external'] = new_summary
