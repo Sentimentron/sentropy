@@ -397,7 +397,9 @@ class KDQueryProcessor(object):
         kwset,  dset = set([]), set([])
 
         # Map keywords and domains to identifiers
+        logging.info("Resolving keywords...")
         keywords = {k : self._kres.resolve(k) for k in keywords}
+        logging.info("Resolving domains...")
         domains  = {d : self._dres.resolve(d) for d in domains}
 
         resolved = 0
@@ -424,7 +426,7 @@ class KDQueryProcessor(object):
         for raw in domains:
             domain_contents = list(self._d_res.resolve(domains[raw]))
             if len(domain_contents) == 0:
-                yield QueryMessage("No documents found for domain %s", (raw,))
+                yield QueryMessage("No documents found for domain %s" % (raw,))
             dmset.update([(d, raw) for d in domain_contents])
 
         # Generate list of possible keyword bigrams
@@ -633,7 +635,10 @@ class JSONResultPresenter(ResultPresenter):
             src.pop('all', None)
 
             # Compute a sample of keyterms
-            src['keywords'] = [k for k,c in random.sample(src['keywords'].most_common(50), 15)]
+            if len(src['keywords']) < 15:
+                src['keywords'] = src['keywords'].most_common()
+            else:
+                src['keywords'] = [k for k,c in random.sample(src['keywords'].most_common(50), 15)]
 
             # Find out what gets linked to, 5 categories excluding 'other'
             new_summary = {}
@@ -704,6 +709,8 @@ class QueryProcessor(object):
             self.keywords.add(keyword)
             self.keywords.update(self.kwstack.resolve(keyword))
 
+        logging.info(self.domains); logging.info(self.keywords)
+
         processor = None 
         if len(self.keywords) > 0 and len(self.domains) == 0:
             processor = self.kproc
@@ -714,6 +721,7 @@ class QueryProcessor(object):
         dmset = set([])
         for row in processor.get_document_rows(self.keywords, self.domains, dmset):
             if type(row) is QueryMessage:
+                logging.info(row)
                 self.uq.message = str(row)
                 try:
                     self._uq_session.commit()
@@ -725,7 +733,7 @@ class QueryProcessor(object):
 
 
 if __name__ == "__main__":
-    core.configure_logging('debug')
+    core.configure_logging()
     engine = core.get_database_engine_string()
     logging.info("Using connection string '%s'" % (engine,))
     engine = create_engine(engine, encoding='utf-8', isolation_level = 'READ UNCOMMITTED', poolclass=SingletonThreadPool)
@@ -744,20 +752,23 @@ if __name__ == "__main__":
         qq = QueryQueue(engine)
         for uq_id in qq:
             uq = session.query(UserQuery).get(uq_id)
-            if (uq.fulfilled - datetime.now()).days < 14:
+            if uq is None:
+                logging.error("Query not found: %d", uq_id)
+            elif uq.fulfilled is not None and (uq.fulfilled - datetime.datetime.now()).days < 14:
                 logging.info("%s: Query already fulfilled in the last 14 days", uq)
-                continue 
-            qp = QueryProcessor(uq, engine, session, S3JSONResultPresenter)
-            pm = EmailProcessor()
-            try:
-                qp.execute()
-                if uq.email is not None:
-                    pm.send_success(uq.email, uq.id)
-            except QueryException as ex:
-                if uq.email is not None:
-                    pm.send_failure(uq.email, ex.message)
-                else:
-                    uq.message = ex.message
-                    uq.cancelled = True 
-                    session.commit()
+            else:
+                logging.info("Processing query %d...", uq_id)
+                qp = QueryProcessor(uq, engine, session, S3JSONResultPresenter)
+                pm = EmailProcessor()
+                try:
+                    qp.execute()
+                    if uq.email is not None:
+                        pm.send_success(uq.email, uq.id)
+                except QueryException as ex:
+                    if uq.email is not None:
+                        pm.send_failure(uq.email, ex.message)
+                    else:
+                        uq.message = ex.message
+                        uq.cancelled = True 
+                        session.commit()
             qq.set_completed(uq_id)
