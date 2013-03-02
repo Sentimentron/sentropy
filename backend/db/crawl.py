@@ -62,7 +62,8 @@ class UserQuery(Base):
 		ret = []
 		for c in chunks:
 			if len(set(c) - allowed_domain_chars) == 0:
-				ret.append(c)
+				if '.' in c:
+					ret.append(c)
 		return ret
 
 	def __init__(self, text):
