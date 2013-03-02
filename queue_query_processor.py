@@ -359,7 +359,6 @@ class KQueryProcessor(object):
     def __init__(self, engine):
         self._kd_proc = KDQueryProcessor(engine)
         self._kres = KeywordIDResolutionService()
-        self._pre_kres = FuzzyKeywordResolutionService()
 
     def get_document_rows(self, keywords, domains=set([]), dmset = set([])):
         # Create a new session
@@ -708,6 +707,7 @@ class QueryProcessor(object):
         self.kdproc  = KDQueryProcessor(self._engine)
         self.fd      = FuzzyDomainResolutionService(self._engine)
         self.kwstack = MetaComboResolutionService([k(self._engine, None) for k in [FuzzyKeywordCaseResolutionService]])
+        self.kwstack = FuzzyKeywordResolutionService
 
     def execute(self):
         import time 
