@@ -190,7 +190,7 @@ class MetaComboResolutionService(MetaResolutionService):
 
 class FuzzyKeywordComboResolutionService(MetaComboResolutionService):
 
-    def __init__(self, enigine):
+    def __init__(self, engine):
         self.engines = []
         for k in [FuzzyKeywordCaseResolutionService, 
             FuzzyKeywordLeftSpaceResolutionService,
@@ -707,7 +707,7 @@ class QueryProcessor(object):
         self.kdproc  = KDQueryProcessor(self._engine)
         self.fd      = FuzzyDomainResolutionService(self._engine)
         self.kwstack = MetaComboResolutionService([k(self._engine, None) for k in [FuzzyKeywordCaseResolutionService]])
-        self.kwstack = FuzzyKeywordResolutionService
+        self.kwstack = FuzzyKeywordResolutionService(self._engine)
 
     def execute(self):
         import time 
