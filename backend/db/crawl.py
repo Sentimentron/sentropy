@@ -40,7 +40,9 @@ class UserQuery(Base):
 	text 		= Column(String(255), unique = True, nullable = False)
 	fulfilled   = Column(DateTime)
 	email		= Column(String(254))
-
+    message     = Column(String(255))
+    cancelled   = Column(Boolean, default=False)
+    
 	@validates('text')
 	def validate(self, key, value):
 		if len(value) > 255:
