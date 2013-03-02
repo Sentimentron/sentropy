@@ -463,9 +463,10 @@ class KDQueryProcessor(object):
             if added:
                 continue
 
-        using_bigrams = len(dset) > 100
+        using_bigrams = len(dset) > 30
         if not using_bigrams:
-            yield QueryMessage("Few exact matches for this query. Expanding...")
+            if len(keywords) > 2:
+                yield QueryMessage("Few exact matches for this query. Expanding...")
             # Construct the final documents set
             if len(keywords) == 0:
                 dset = dmset 
@@ -478,8 +479,13 @@ class KDQueryProcessor(object):
                             break 
 
         yield QueryMessage("Fetching document details...")
-        for d, raw_domain in dset:
-            logging.info("%d Fetching document details", d)
+        last_percentage = None 
+        for count, (d, raw_domain) in enumerate(dset):
+            percentage = round(count / len(dset), 1) * 100
+            if percentage != last_percentage:
+                yield QueryMessage("Fetching document details... (%d %% complete)", percentage)
+                last_percentage = percentage
+            logging.info("%d Fetching document details (%d %% complete)", percentage)
             doc = self._session.query(Document).get(d)
 
             logging.info("%d Searching for publication dates...", d)
