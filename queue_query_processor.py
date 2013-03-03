@@ -672,7 +672,9 @@ class JSONResultPresenter(ResultPresenter):
 
             # Find out what gets linked to, 5 categories excluding 'other'
             new_summary = {}
+            total_links = 0
             for dmkey, count in src['external'].most_common(5):
+                total_links += count 
                 new_summary[dmkey] = count 
             others = 0
             for dmkey in src['external']:
@@ -681,9 +683,11 @@ class JSONResultPresenter(ResultPresenter):
                         new_summary[dm_key] = 1
                     else:
                         others += 1
-
-            new_summary['others'] = 1
-            src['external'] = new_summary
+            if total_links >= 20:
+                new_summary['others'] = 1
+                src['external'] = new_summary
+            else:
+                src.pop('external', None)
 
         return ret 
 
